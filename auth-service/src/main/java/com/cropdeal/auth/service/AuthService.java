@@ -22,6 +22,8 @@ public interface AuthService {
 
     MessageResponse verifyOtp(String otp);
 
+    MessageResponse changePassword(ChangePasswordRequest request);
+
     MessageResponse updateUserStatus(
             Long userId,
             UserStatus status

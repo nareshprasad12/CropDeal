@@ -106,6 +106,16 @@ public class AuthController {
         );
     }
 
+    @PostMapping("/change-password")
+    @Operation(summary = "Change Password with Current Password Verification")
+    public ResponseEntity<MessageResponse> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        return ResponseEntity.ok(
+                authService.changePassword(request)
+        );
+    }
+
     @PutMapping("/users/{userId}/status")
     public ResponseEntity<MessageResponse> updateStatus(
             @PathVariable Long userId,

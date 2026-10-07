@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminService } from '../../core/services/admin.service';
 import { UserService } from '../../core/services/user.service';
+import { AuthService } from '../../core/services/auth.service';
 import { User, UserRole } from '../../core/models/user.model';
 
 export interface AdminUserItem extends User {
@@ -98,21 +99,28 @@ export interface AdminUserItem extends User {
                       <i class="fa-solid fa-eye"></i> View
                     </button>
 
+                    <!-- Protected Badge for Admin or Self -->
+                    <span *ngIf="isAdminUser(u)" class="badge badge-primary" title="Administrator account is protected and cannot be blocked">
+                      <i class="fa-solid fa-shield-halved"></i> Protected
+                    </span>
+
                     <!-- Block / Unblock Toggle -->
-                    <button
-                      *ngIf="!(u.isBlocked || u.status === 'BLOCKED')"
-                      class="btn btn-danger btn-sm"
-                      (click)="toggleBlock(u, true)"
-                      title="Deactivate / Block this user from marketplace">
-                      <i class="fa-solid fa-ban"></i> Block
-                    </button>
-                    <button
-                      *ngIf="u.isBlocked || u.status === 'BLOCKED'"
-                      class="btn btn-success btn-sm"
-                      (click)="toggleBlock(u, false)"
-                      title="Activate / Unblock this user">
-                      <i class="fa-solid fa-unlock"></i> Unblock
-                    </button>
+                    <ng-container *ngIf="!isAdminUser(u)">
+                      <button
+                        *ngIf="!(u.isBlocked || u.status === 'BLOCKED')"
+                        class="btn btn-danger btn-sm"
+                        (click)="toggleBlock(u, true)"
+                        title="Deactivate / Block this user from marketplace">
+                        <i class="fa-solid fa-ban"></i> Block
+                      </button>
+                      <button
+                        *ngIf="u.isBlocked || u.status === 'BLOCKED'"
+                        class="btn btn-success btn-sm"
+                        (click)="toggleBlock(u, false)"
+                        title="Activate / Unblock this user">
+                        <i class="fa-solid fa-unlock"></i> Unblock
+                      </button>
+                    </ng-container>
                   </div>
                 </td>
               </tr>
@@ -202,18 +210,23 @@ export interface AdminUserItem extends User {
 
           <div class="modal-footer">
             <button class="btn btn-secondary" (click)="selectedUser = null">Close</button>
-            <button
-              *ngIf="!(selectedUser.isBlocked || selectedUser.status === 'BLOCKED')"
-              class="btn btn-danger"
-              (click)="toggleBlock(selectedUser, true)">
-              <i class="fa-solid fa-ban"></i> Deactivate / Block User
-            </button>
-            <button
-              *ngIf="selectedUser.isBlocked || selectedUser.status === 'BLOCKED'"
-              class="btn btn-success"
-              (click)="toggleBlock(selectedUser, false)">
-              <i class="fa-solid fa-unlock"></i> Activate / Unblock User
-            </button>
+            <span *ngIf="isAdminUser(selectedUser)" class="badge badge-primary px-3 py-2">
+              <i class="fa-solid fa-shield-halved"></i> Administrator Account Protected
+            </span>
+            <ng-container *ngIf="!isAdminUser(selectedUser)">
+              <button
+                *ngIf="!(selectedUser.isBlocked || selectedUser.status === 'BLOCKED')"
+                class="btn btn-danger"
+                (click)="toggleBlock(selectedUser, true)">
+                <i class="fa-solid fa-ban"></i> Deactivate / Block User
+              </button>
+              <button
+                *ngIf="selectedUser.isBlocked || selectedUser.status === 'BLOCKED'"
+                class="btn btn-success"
+                (click)="toggleBlock(selectedUser, false)">
+                <i class="fa-solid fa-unlock"></i> Activate / Unblock User
+              </button>
+            </ng-container>
           </div>
         </div>
       </div>
@@ -390,8 +403,25 @@ export class AdminUsersComponent implements OnInit {
 
   constructor(
     private adminService: AdminService,
-    private userService: UserService
+    private userService: UserService,
+    private authService: AuthService
   ) {}
+
+  isAdminUser(u: AdminUserItem | null): boolean {
+    if (!u) return false;
+    const role = (u.role || '').toUpperCase();
+    if (role === 'ADMIN') return true;
+    const username = (u.username || '').toLowerCase();
+    if (username === 'admin') return true;
+    if (String(u.id) === '1' || String(u.userId) === '1') return true;
+    const current = this.authService.currentUserValue;
+    if (current && (current.role === 'ADMIN' || current.username?.toLowerCase() === 'admin')) {
+      if (String(current.id) === String(u.id) || String(current.userId) === String(u.userId)) return true;
+      if (current.email && u.email && current.email.toLowerCase() === u.email.toLowerCase()) return true;
+      if (current.username && u.username && current.username.toLowerCase() === u.username.toLowerCase()) return true;
+    }
+    return false;
+  }
 
   ngOnInit(): void {
     this.loadUsers();
@@ -400,25 +430,82 @@ export class AdminUsersComponent implements OnInit {
   loadUsers(): void {
     this.adminService.getAllUsers(this.roleFilter).subscribe({
       next: (data) => {
+        const masterList = this.getDefaultMockUsers();
+        const userMap = new Map<string, AdminUserItem>();
+        // Add master users first
+        masterList.forEach(u => {
+          userMap.set(String(u.id || u.userId), u);
+        });
+
+        // Merge backend data
         if (data && data.length > 0) {
-          this.users = data.map((u: any) => ({
-            id: String(u.userId || u.id),
-            userId: String(u.userId || u.id),
-            username: u.username || (u.name ? u.name.toLowerCase().replace(/\s+/g, '_') : 'user_' + (u.userId || u.id)),
-            fullName: u.name || u.fullName,
-            email: u.email || `${(u.name || 'user').toLowerCase().replace(/\s+/g, '')}@cropdeal.in`,
-            phone: u.phone || '+91 98765 00000',
-            role: u.role || 'FARMER',
-            address: u.address || 'Punjab Mandi District',
-            status: u.status || 'ACTIVE',
-            isBlocked: u.status === 'BLOCKED' || !!u.isBlocked,
-            details: u.details || (u.role === 'FARMER' ? 'Farm Location: Verified Mandi Field' : (u.role === 'DEALER' ? 'Business: Commercial Trader' : 'Vehicle: Heavy Freight Fleet')),
-            averageRating: u.averageRating || 4.8,
-            createdAt: u.createdAt || '2026-08-15'
-          }));
-        } else {
-          this.users = this.getDefaultMockUsers();
+          data.forEach((u: any) => {
+            const uid = String(u.userId || u.id);
+            const existing = userMap.get(uid);
+            const rawRole = String(u.role || (existing ? existing.role : '') || '').toUpperCase().replace(/^ROLE_/, '');
+            const isAdm = (rawRole === 'ADMIN' || uid === '1' || (u.username && u.username.toLowerCase() === 'admin') || (u.email && u.email.toLowerCase().includes('admin@')));
+            const cleanRole = isAdm ? 'ADMIN' : (rawRole || 'FARMER');
+            const isBlocked = isAdm ? false : (u.status === 'BLOCKED' || !!u.isBlocked);
+
+            userMap.set(uid, {
+              id: uid,
+              userId: uid,
+              username: u.username || (isAdm ? 'admin' : (existing ? existing.username : (u.name ? u.name.toLowerCase().replace(/[\s\W]+/g, '_') : 'user_' + uid))),
+              fullName: u.name || u.fullName || (isAdm ? 'System Administrator' : (existing ? existing.fullName : 'Market User')),
+              email: u.email || (isAdm ? 'admin@cropdeal.com' : (existing ? existing.email : `${uid}@cropdeal.in`)),
+              phone: u.phone || (existing ? existing.phone : '+91 98765 00000'),
+              role: cleanRole as any,
+              address: u.address || (isAdm ? 'CropDeal Headquarters, Tech Park' : (existing ? existing.address : 'Market Trading Zone')),
+              status: isBlocked ? 'BLOCKED' : 'ACTIVE',
+              isBlocked: isBlocked,
+              details: u.additionalInfo || u.details || (existing ? existing.details : `${cleanRole} Trading Participant`),
+              averageRating: u.rating || u.averageRating || (isAdm ? 5.0 : 4.8),
+              createdAt: u.createdAt || (existing ? existing.createdAt : '2026-08-15')
+            });
+          });
         }
+
+        // Ensure Administrator (#1) is ALWAYS accurately present with role ADMIN
+        if (!userMap.has('1') && (this.roleFilter === 'ALL' || this.roleFilter === 'ADMIN')) {
+          userMap.set('1', {
+            id: '1',
+            userId: '1',
+            username: 'admin',
+            fullName: 'System Administrator',
+            email: 'admin@cropdeal.com',
+            phone: '+91 99999 99999',
+            role: 'ADMIN',
+            address: 'CropDeal Headquarters, Tech Park',
+            status: 'ACTIVE',
+            isBlocked: false,
+            details: 'Platform Governance & Superuser',
+            averageRating: 5.0,
+            createdAt: '2026-08-01'
+          });
+        }
+
+        this.users = Array.from(userMap.values());
+        // Sync master storage with live database data
+        try {
+          const raw = localStorage.getItem('cropdeal_users_master');
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              list.forEach((item: any) => {
+                const live = this.users.find(x =>
+                  String(x.userId) === String(item.userId || item.id) ||
+                  (x.username && item.username && x.username.toLowerCase() === item.username.toLowerCase()) ||
+                  (x.email && item.email && x.email.toLowerCase() === item.email.toLowerCase())
+                );
+                if (live) {
+                  item.status = live.status;
+                  item.isBlocked = live.isBlocked;
+                }
+              });
+              localStorage.setItem('cropdeal_users_master', JSON.stringify(list));
+            }
+          }
+        } catch {}
       },
       error: () => {
         this.users = this.getDefaultMockUsers();
@@ -445,6 +532,11 @@ export class AdminUsersComponent implements OnInit {
   }
 
   toggleBlock(u: AdminUserItem, shouldBlock: boolean): void {
+    if (shouldBlock && this.isAdminUser(u)) {
+      this.alertMsg = '⚠️ Security restriction: You cannot block an Administrator account or your own active account.';
+      setTimeout(() => this.alertMsg = '', 5000);
+      return;
+    }
     const userId = u.userId || u.id || '1';
     const action$ = shouldBlock
       ? this.adminService.blockUser(userId, 'Compliance hold by Administrator')
@@ -466,10 +558,31 @@ export class AdminUsersComponent implements OnInit {
     u.status = shouldBlock ? 'BLOCKED' : 'ACTIVE';
     this.userService.updateMasterUser({
       id: u.id,
-      role: u.role,
+      userId: u.userId,
+      email: u.email,
+      username: u.username,
       status: u.status,
       isBlocked: shouldBlock
     });
+
+    try {
+      const raw = localStorage.getItem('cropdeal_users_master');
+      if (raw) {
+        const list = JSON.parse(raw);
+        const idx = list.findIndex((x: any) =>
+          String(x.id) === String(u.id) ||
+          String(x.userId) === String(u.userId) ||
+          (x.email && u.email && x.email.toLowerCase() === u.email.toLowerCase()) ||
+          (x.username && u.username && x.username.toLowerCase() === u.username.toLowerCase())
+        );
+        if (idx >= 0) {
+          list[idx].status = u.status;
+          list[idx].isBlocked = shouldBlock;
+          localStorage.setItem('cropdeal_users_master', JSON.stringify(list));
+        }
+      }
+    } catch {}
+
     if (this.selectedUser && (this.selectedUser.userId === u.userId || this.selectedUser.id === u.id)) {
       this.selectedUser.isBlocked = shouldBlock;
       this.selectedUser.status = u.status;

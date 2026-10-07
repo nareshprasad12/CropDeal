@@ -23,6 +23,9 @@ import { UserRole } from '../../core/models/user.model';
         <div *ngIf="errorMessage" class="auth-alert alert-error">
           <i class="fa-solid fa-triangle-exclamation"></i>
           <span>{{ errorMessage }}</span>
+          <a *ngIf="errorMessage.includes('registered') || errorMessage.includes('login')" routerLink="/auth/login" class="login-alert-btn">
+            Sign In Now &rarr;
+          </a>
         </div>
         <div *ngIf="successMessage" class="auth-alert alert-success">
           <i class="fa-solid fa-circle-check"></i>
@@ -175,6 +178,18 @@ import { UserRole } from '../../core/models/user.model';
     }
     .alert-error { background: var(--danger-bg); color: var(--danger); }
     .alert-success { background: var(--success-bg); color: var(--success); }
+    .login-alert-btn {
+      margin-left: auto;
+      background: var(--primary-600);
+      color: white;
+      padding: 0.35rem 0.75rem;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .login-alert-btn:hover { background: var(--primary-700); }
   `]
 })
 export class RegisterComponent {
@@ -219,6 +234,24 @@ export class RegisterComponent {
       return;
     }
 
+    // Pre-check if already registered in master storage
+    try {
+      const raw = localStorage.getItem('cropdeal_users_master');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          const match = list.find((u: any) =>
+            (u.email && u.email.toLowerCase() === this.email.trim().toLowerCase()) ||
+            (u.username && u.username.toLowerCase() === this.username.trim().toLowerCase())
+          );
+          if (match) {
+            this.errorMessage = 'Already registered, please login';
+            return;
+          }
+        }
+      }
+    } catch {}
+
     this.loading = true;
     this.errorMessage = '';
 
@@ -241,7 +274,12 @@ export class RegisterComponent {
       },
       error: (err: any) => {
         this.loading = false;
-        this.errorMessage = err.error?.message || err.error?.error || 'Registration failed. Please verify your details.';
+        const msg = err.error?.message || err.error?.error || '';
+        if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('exist') || err.status === 409) {
+          this.errorMessage = 'Already registered, please login';
+        } else {
+          this.errorMessage = msg || 'Registration failed. Please verify your details.';
+        }
       }
     });
   }

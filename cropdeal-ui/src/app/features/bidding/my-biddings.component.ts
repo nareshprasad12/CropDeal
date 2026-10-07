@@ -13,6 +13,7 @@ import { CropService } from '../../core/services/crop.service';
 import { User } from '../../core/models/user.model';
 import { BiddingAuction, BidOffer } from '../../core/models/bidding.model';
 import { Invoice } from '../../core/models/invoice.model';
+import { resolveCropImage } from '../../core/utils/crop-image.util';
 
 interface DealerBidRow {
   auction: BiddingAuction;
@@ -1002,6 +1003,11 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
         this.dealerWalletBalance = b;
       })
     );
+    this.subs.push(
+      this.biddingService.biddings$.subscribe(auctions => {
+        if (auctions) this.processAuctions(auctions);
+      })
+    );
   }
 
   ngOnDestroy(): void {
@@ -1011,28 +1017,33 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
   loadAuctions(): void {
     this.biddingService.getActiveAuctions().subscribe({
       next: (auctions) => {
-        if (!auctions) return;
-        const uid = this.user?.id || this.user?.userId;
-
-        // Dealer: find auctions where dealer is highest bidder or placed a bid
-        const myAuctions = auctions.filter(auc =>
-          auc.highestBidderId === uid || (auc as any).bidderId === uid
-        );
-        this.dealerBids = myAuctions.map(auc => {
-          const isWinning = auc.highestBidderId === uid;
-          return {
-            auction: auc,
-            dealerBidKg: auc.currentHighestBid,
-            isWinning: isWinning
-          };
-        });
-
-        // Farmer: auctions created by this farmer
-        this.farmerAuctions = auctions.filter(a =>
-          a.farmerId === uid
-        );
+        if (auctions) this.processAuctions(auctions);
       }
     });
+  }
+
+  private processAuctions(auctions: BiddingAuction[]): void {
+    const deleted = this.biddingService.getDeletedAuctionIds();
+    const valid = auctions.filter(a => !deleted.has(String(a.id)));
+    const uid = this.user?.id || this.user?.userId;
+
+    // Dealer: find auctions where dealer is highest bidder or placed a bid
+    const myAuctions = valid.filter(auc =>
+      auc.highestBidderId === uid || (auc as any).bidderId === uid
+    );
+    this.dealerBids = myAuctions.map(auc => {
+      const isWinning = auc.highestBidderId === uid;
+      return {
+        auction: auc,
+        dealerBidKg: auc.currentHighestBid,
+        isWinning: isWinning
+      };
+    });
+
+    // Farmer: auctions created by this farmer
+    this.farmerAuctions = valid.filter(a =>
+      a.farmerId === uid
+    );
   }
 
   // Dealer Computed
@@ -1289,8 +1300,9 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
       'BID'
     );
 
-    // 7. Close the auction
-    this.biddingService.closeAuction(auction.id, orderId, fullStockTotal).subscribe({
+    // 7. Close and delete the auction so it is completely removed from live and admin bidding floors
+    this.biddingService.closeAuction(auction.id, orderId, fullStockTotal).subscribe();
+    this.biddingService.deleteAuction(auction.id).subscribe({
       next: () => {
         this.actionMsg = `✓ Bid accepted! Deal awarded to ${auction.highestBidderName}. ₹${fullStockTotal.toLocaleString()} credited to your wallet and Order #${orderId} generated!`;
         this.loadAuctions();
@@ -1301,9 +1313,10 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
 
   closeAuction(auction: BiddingAuction): void {
     if (!confirm('Are you sure you want to end this auction early?')) return;
-    this.biddingService.closeAuction(auction.id).subscribe({
+    this.biddingService.closeAuction(auction.id).subscribe();
+    this.biddingService.deleteAuction(auction.id).subscribe({
       next: () => {
-        this.actionMsg = `Auction #${auction.id} closed.`;
+        this.actionMsg = `Auction #${auction.id} closed and removed.`;
         this.loadAuctions();
         setTimeout(() => this.actionMsg = '', 3000);
       }
@@ -1311,20 +1324,7 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
   }
 
   getCropImage(cropName: string): string {
-    const name = (cropName || '').toLowerCase();
-    if (name.includes('rice') || name.includes('paddy')) return '/assets/images/crop-rice.jpg';
-    if (name.includes('wheat')) return '/assets/images/crop-wheat.jpg';
-    if (name.includes('tomato')) return '/assets/images/crop-tomato.jpg';
-    if (name.includes('onion')) return '/assets/images/crop-onion.jpg';
-    if (name.includes('potato')) return '/assets/images/crop-potato.jpg';
-    if (name.includes('cotton')) return '/assets/images/crop-cotton.jpg';
-    if (name.includes('maize')) return '/assets/images/crop-maize.jpg';
-    if (name.includes('chilli')) return '/assets/images/crop-chili.jpg';
-    if (name.includes('groundnut')) return '/assets/images/crop-groundnut.jpg';
-    if (name.includes('turmeric')) return '/assets/images/crop-turmeric.jpg';
-    if (name.includes('sugarcane')) return '/assets/images/crop-sugarcane.jpg';
-    if (name.includes('banana')) return '/assets/images/crop-banana.jpg';
-    return '/assets/images/crop-rice.jpg';
+    return resolveCropImage(cropName);
   }
 
   onThumbError(event: any): void {

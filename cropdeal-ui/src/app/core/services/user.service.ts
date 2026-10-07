@@ -182,8 +182,49 @@ export class UserService {
     const raw = localStorage.getItem(this.MASTER_USERS_KEY);
     if (raw) {
       try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        const parsed: User[] = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          let healed = false;
+          parsed.forEach(u => {
+            const uLower = (u.username || '').toLowerCase();
+            const uId = String(u.id || u.userId);
+            if (uId === '1' || uLower === 'admin' || (u.email && u.email.toLowerCase().includes('admin@cropdeal'))) {
+              if (u.role !== 'ADMIN') {
+                u.role = 'ADMIN';
+                healed = true;
+              }
+              if (u.isBlocked || u.status === 'BLOCKED') {
+                u.isBlocked = false;
+                u.status = 'ACTIVE';
+                healed = true;
+              }
+            } else if (uId === '4' || uLower === 'dealer' || (u.email && u.email.toLowerCase().includes('dealer@'))) {
+              if (u.role !== 'DEALER') {
+                u.role = 'DEALER';
+                healed = true;
+              }
+            } else if (uId === '3' || uLower === 'delivery_partner' || (u.email && u.email.toLowerCase().includes('delivery@'))) {
+              if (u.role !== 'DELIVERY_PARTNER') {
+                u.role = 'DELIVERY_PARTNER';
+                healed = true;
+              }
+            } else if (['farmer'].includes(uLower)) {
+              if (u.role !== 'FARMER') {
+                u.role = 'FARMER';
+                healed = true;
+              }
+              if (u.isBlocked || u.status === 'BLOCKED') {
+                u.isBlocked = false;
+                u.status = 'ACTIVE';
+                healed = true;
+              }
+            }
+          });
+          if (healed) {
+            localStorage.setItem(this.MASTER_USERS_KEY, JSON.stringify(parsed));
+          }
+          return parsed;
+        }
       } catch {}
     }
     const defaults = this.getDefaultSeedUsers();
@@ -193,26 +234,37 @@ export class UserService {
 
   getDefaultSeedUsers(): User[] {
     return [
-      { id: '1', userId: '1', username: 'farmer', fullName: 'Sardar Gurpreet Singh', email: 'farmer@cropdeal.in', phone: '+91 98140 11223', role: 'FARMER', address: 'Khanna Mandi, Ludhiana, Punjab', status: 'ACTIVE', isBlocked: false, createdAt: '2026-08-10' },
-      { id: '2', userId: '2', username: 'dealer', fullName: 'Apex Agro Mills Ltd', email: 'dealer@cropdeal.in', phone: '+91 98722 55667', role: 'DEALER', address: 'Commercial Grain Terminal, New Delhi', status: 'ACTIVE', isBlocked: false, createdAt: '2026-08-12' },
+      { id: '1', userId: '1', username: 'admin', fullName: 'System Administrator', email: 'admin@cropdeal.com', phone: '+91 99999 99999', role: 'ADMIN', address: 'CropDeal Headquarters, Tech Park', status: 'ACTIVE', isBlocked: false, createdAt: '2026-08-01' },
+      { id: '2', userId: '2', username: 'ramesh', fullName: 'Ramesh Farmer', email: 'ramesh@cropdeal.in', phone: '+91 98765 43210', role: 'FARMER', address: 'Khanna Mandi, Ludhiana, Punjab', status: 'ACTIVE', isBlocked: false, createdAt: '2026-08-10' },
       { id: '3', userId: '3', username: 'delivery_partner', fullName: 'Kisan Express Agro Logistics', email: 'delivery@cropdeal.in', phone: '+91 98888 22110', role: 'DELIVERY_PARTNER', address: 'Northern Freight Corridor Yard 3', status: 'ACTIVE', isBlocked: false, createdAt: '2026-08-20' },
-      { id: '4', userId: '4', username: 'admin', fullName: 'System Administrator', email: 'admin@cropdeal.in', phone: '+91 99999 99999', role: 'ADMIN', address: 'CropDeal Headquarters, Tech Park', status: 'ACTIVE', isBlocked: false, createdAt: '2026-08-01' }
+      { id: '4', userId: '4', username: 'dealer', fullName: 'Apex Agro Mills Ltd', email: 'dealer@cropdeal.in', phone: '+91 98722 55667', role: 'DEALER', address: 'Commercial Grain Terminal, New Delhi', status: 'ACTIVE', isBlocked: false, createdAt: '2026-08-12' },
+      { id: '11', userId: '11', username: 'farmer', fullName: 'Sardar Gurpreet Singh', email: 'farmer@cropdeal.in', phone: '+91 98140 11223', role: 'FARMER', address: 'Khanna Mandi, Ludhiana, Punjab', status: 'ACTIVE', isBlocked: false, createdAt: '2026-08-10' }
     ];
   }
 
   updateMasterUser(updatedData: Partial<User>): void {
     const users = this.getMasterUsers();
-    const idx = users.findIndex(u =>
-      (updatedData.id && (u.id === updatedData.id || u.userId === updatedData.id)) ||
-      (updatedData.role && u.role === updatedData.role)
-    );
+    let idx = users.findIndex(u => {
+      if (updatedData.id && (String(u.id) === String(updatedData.id) || String(u.userId) === String(updatedData.id))) return true;
+      if (updatedData.email && u.email && u.email.toLowerCase() === updatedData.email.toLowerCase()) return true;
+      if (updatedData.username && u.username && u.username.toLowerCase() === updatedData.username.toLowerCase()) return true;
+      return false;
+    });
+    if (idx === -1 && !updatedData.id && updatedData.role) {
+      idx = users.findIndex(u => u.role === updatedData.role);
+    }
     if (idx !== -1) {
+      // Prevent blocking any admin account
+      if (users[idx].role === 'ADMIN' || users[idx].username === 'admin') {
+        updatedData.isBlocked = false;
+        updatedData.status = 'ACTIVE';
+      }
       users[idx] = { ...users[idx], ...updatedData };
       localStorage.setItem(this.MASTER_USERS_KEY, JSON.stringify(users));
 
       // Also update currently stored user in AuthService if applicable
       const curr = this.authService.currentUserValue;
-      if (curr && (curr.role === users[idx].role || curr.id === users[idx].id || curr.userId === users[idx].userId)) {
+      if (curr && (curr.id === users[idx].id || curr.userId === users[idx].userId || curr.email === users[idx].email)) {
         this.authService.updateStoredUser({ ...curr, ...users[idx] });
       }
     }

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, ActivatedRoute } from '@angular/router';
@@ -13,6 +13,7 @@ import { CropService } from '../../core/services/crop.service';
 import { User } from '../../core/models/user.model';
 import { BiddingAuction, BidOffer } from '../../core/models/bidding.model';
 import { Invoice } from '../../core/models/invoice.model';
+import { resolveCropImage } from '../../core/utils/crop-image.util';
 
 interface AuctionItem {
   id: string;
@@ -23,6 +24,7 @@ interface AuctionItem {
   location: string;
   district: string;
   state: string;
+  startingPriceKg: number;
   currentBidKg: number;
   totalQuantityKg: number;
   farmerName: string;
@@ -36,6 +38,7 @@ interface AuctionItem {
   status: 'OPEN' | 'CLOSED';
   isFavorite?: boolean;
   bidsHistory: Array<{ bidderName: string; bidPriceKg: number; bidTime: string }>;
+  endTime?: string;
 }
 
 @Component({
@@ -226,16 +229,31 @@ interface AuctionItem {
               <i class="fa-solid fa-location-dot"></i> {{ item.location }}
             </div>
 
-            <!-- Stats Row: Current Bid & Total Quantity -->
+            <!-- Stats Row: Farmer Fixed Price & Current Highest Bid -->
             <div class="bid-stats-box">
               <div class="stat-col">
-                <span class="stat-lbl">Current Bid</span>
-                <span class="stat-val text-emerald">₹{{ item.currentBidKg | number:'1.2-2' }} <small>/ Kg</small></span>
+                <span class="stat-lbl">Farmer Fixed Price</span>
+                <span class="stat-val text-dark">₹{{ item.startingPriceKg | number:'1.2-2' }} <small>/ Kg</small></span>
               </div>
               <div class="stat-divider"></div>
               <div class="stat-col">
-                <span class="stat-lbl">Total Quantity</span>
-                <span class="stat-val text-dark">{{ item.totalQuantityKg | number:'1.0-0' }} Kg</span>
+                <span class="stat-lbl">Current Highest Bid</span>
+                <span class="stat-val text-emerald">
+                  <ng-container *ngIf="item.bidsCount > 0">₹{{ item.currentBidKg | number:'1.2-2' }} <small>/ Kg</small></ng-container>
+                  <ng-container *ngIf="item.bidsCount === 0"><small class="text-muted">Awaiting 1st Bid</small></ng-container>
+                </span>
+              </div>
+            </div>
+
+            <!-- Total Lot Quantity & Latest Bid Indicator -->
+            <div class="lot-qty-row">
+              <div class="lot-qty-pill">
+                <i class="fa-solid fa-boxes-stacked text-emerald"></i>
+                <span>Lot: <strong>{{ item.totalQuantityKg | number:'1.0-0' }} Kg</strong></span>
+              </div>
+              <div class="lot-qty-pill" *ngIf="item.bidsHistory && item.bidsHistory.length > 0">
+                <i class="fa-solid fa-clock-rotate-left text-muted"></i>
+                <span>Latest: <strong class="text-emerald">₹{{ item.bidsHistory[0].bidPriceKg | number:'1.2-2' }}/Kg</strong></span>
               </div>
             </div>
 
@@ -338,14 +356,21 @@ interface AuctionItem {
                 </div>
               </div>
 
-              <!-- 3 Highlights -->
-              <div class="metrics-3box mt-3">
+              <!-- 4 Metrics Highlights (Farmer Fixed Price + Highest Bid + Quantity + Timer) -->
+              <div class="metrics-4box mt-3">
                 <div class="box">
-                  <span class="lbl">Current Highest Bid</span>
-                  <strong class="val text-emerald">₹{{ selectedAuction.currentBidKg | number:'1.2-2' }} / Kg</strong>
+                  <span class="lbl">Farmer Fixed Price</span>
+                  <strong class="val text-dark">₹{{ selectedAuction.startingPriceKg | number:'1.2-2' }} <small>/ Kg</small></strong>
                 </div>
                 <div class="box">
-                  <span class="lbl">Total Quantity</span>
+                  <span class="lbl">Current Highest Bid</span>
+                  <strong class="val text-emerald">
+                    <ng-container *ngIf="selectedAuction.bidsCount > 0">₹{{ selectedAuction.currentBidKg | number:'1.2-2' }} <small>/ Kg</small></ng-container>
+                    <ng-container *ngIf="selectedAuction.bidsCount === 0"><small class="text-muted">Awaiting 1st Bid</small></ng-container>
+                  </strong>
+                </div>
+                <div class="box">
+                  <span class="lbl">Lot Quantity</span>
                   <strong class="val">{{ selectedAuction.totalQuantityKg | number:'1.0-0' }} Kg</strong>
                 </div>
                 <div class="box">
@@ -354,12 +379,12 @@ interface AuctionItem {
                 </div>
               </div>
 
-              <!-- Place Bid Form Box (matches image7.png) -->
+              <!-- Place Bid Form Box -->
               <div class="bid-submission-box mt-3">
                 <div class="bid-box-title">
                   <i class="fa-solid fa-gavel text-emerald"></i>
                   <h4>Place Your Bid</h4>
-                  <span class="subtext">Enter your bid price in ₹ per kilogram (₹/Kg)</span>
+                  <span class="subtext">Your bid must be strictly higher than the current highest bid (₹{{ selectedAuction.currentBidKg | number:'1.2-2' }}/Kg)</span>
                 </div>
 
                 <div class="bid-inputs-row mt-3">
@@ -368,6 +393,7 @@ interface AuctionItem {
                     <input
                       type="number"
                       step="0.5"
+                      [min]="selectedAuction.currentBidKg + 0.5"
                       [(ngModel)]="userBidPrice"
                       (ngModelChange)="onBidPriceChange()"
                       class="bid-num-input"
@@ -379,6 +405,23 @@ interface AuctionItem {
                     <strong class="calc-val text-emerald">₹{{ calculatedTotalAmount | number:'1.0-0' }}</strong>
                     <span class="calc-sub">({{ selectedAuction.totalQuantityKg }} Kg × ₹{{ userBidPrice || 0 }})</span>
                   </div>
+                </div>
+
+                <!-- Quick Incremental Bid Selectors -->
+                <div class="quick-bid-chips-wrap mt-2">
+                  <span class="quick-lbl"><i class="fa-solid fa-bolt text-amber"></i> Quick Raise:</span>
+                  <div class="quick-btns-row">
+                    <button type="button" class="btn-quick-bid" (click)="setQuickBid(1)">+ ₹1 (₹{{ (selectedAuction.currentBidKg + 1) | number:'1.2-2' }})</button>
+                    <button type="button" class="btn-quick-bid" (click)="setQuickBid(2)">+ ₹2 (₹{{ (selectedAuction.currentBidKg + 2) | number:'1.2-2' }})</button>
+                    <button type="button" class="btn-quick-bid" (click)="setQuickBid(5)">+ ₹5 (₹{{ (selectedAuction.currentBidKg + 5) | number:'1.2-2' }})</button>
+                    <button type="button" class="btn-quick-bid" (click)="setQuickBid(10)">+ ₹10 (₹{{ (selectedAuction.currentBidKg + 10) | number:'1.2-2' }})</button>
+                  </div>
+                </div>
+
+                <!-- Validation Alert Banner -->
+                <div *ngIf="userBidPrice && userBidPrice <= selectedAuction.currentBidKg" class="alert alert-danger p-2 mt-2 text-xs">
+                  <i class="fa-solid fa-triangle-exclamation"></i>
+                  Your bid (₹{{ userBidPrice | number:'1.2-2' }}/Kg) must be strictly higher than the current highest bid of ₹{{ selectedAuction.currentBidKg | number:'1.2-2' }}/Kg.
                 </div>
 
                 <div class="quantity-locked-line mt-2">
@@ -412,7 +455,15 @@ interface AuctionItem {
                   (click)="submitBidOnAuction()"
                   [disabled]="dealerWalletBalance < calculatedTotalAmount || (userBidPrice || 0) <= selectedAuction.currentBidKg || user?.role !== 'DEALER'">
                   <i class="fa-solid fa-gavel"></i>
-                  {{ dealerWalletBalance >= calculatedTotalAmount ? 'Place Bid with Wallet Amount' : 'Insufficient Wallet Balance to Bid' }}
+                  <ng-container *ngIf="(userBidPrice || 0) <= selectedAuction.currentBidKg">
+                    Bid Must Be Higher Than ₹{{ selectedAuction.currentBidKg | number:'1.2-2' }}/Kg
+                  </ng-container>
+                  <ng-container *ngIf="(userBidPrice || 0) > selectedAuction.currentBidKg && dealerWalletBalance < calculatedTotalAmount">
+                    Insufficient Wallet Balance to Bid
+                  </ng-container>
+                  <ng-container *ngIf="(userBidPrice || 0) > selectedAuction.currentBidKg && dealerWalletBalance >= calculatedTotalAmount">
+                    Place Highest Bid of ₹{{ userBidPrice | number:'1.2-2' }}/Kg with Wallet
+                  </ng-container>
                 </button>
               </div>
             </div>
@@ -459,32 +510,42 @@ interface AuctionItem {
                 </div>
               </div>
 
-              <!-- Current Bids History Table (matches image7.png) -->
+              <!-- Latest 5 Bids History Table -->
               <div class="detail-card mt-3">
                 <div class="bids-history-header">
-                  <h4 class="card-sec-title">Current Bids</h4>
-                  <span class="badge-count">{{ selectedAuction.bidsHistory.length }} Bids</span>
+                  <h4 class="card-sec-title">
+                    <i class="fa-solid fa-list-ol text-emerald"></i> Latest 5 Bids
+                  </h4>
+                  <span class="badge-count">{{ selectedAuction.bidsHistory ? Math.min(5, selectedAuction.bidsHistory.length) : 0 }} of {{ selectedAuction.bidsCount || 0 }} Bids</span>
                 </div>
 
                 <div class="bids-table-wrap">
-                  <table class="bids-table">
+                  <table class="bids-table" *ngIf="selectedAuction.bidsHistory && selectedAuction.bidsHistory.length > 0">
                     <thead>
                       <tr>
-                        <th>#</th>
+                        <th>Rank</th>
                         <th>Bidder Name</th>
                         <th>Bid Price (₹/Kg)</th>
                         <th>Bid Time</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr *ngFor="let b of selectedAuction.bidsHistory; let i = index" [class.lead-bid]="i === 0">
-                        <td>{{ i + 1 }}</td>
+                      <tr *ngFor="let b of selectedAuction.bidsHistory.slice(0, 5); let i = index" [class.lead-bid]="i === 0">
+                        <td>
+                          <span *ngIf="i === 0" class="lead-badge"><i class="fa-solid fa-crown text-amber"></i> #1 Highest</span>
+                          <span *ngIf="i > 0">#{{ i + 1 }}</span>
+                        </td>
                         <td><strong>{{ b.bidderName }}</strong></td>
-                        <td class="text-emerald">₹{{ b.bidPriceKg | number:'1.2-2' }}</td>
+                        <td class="text-emerald font-bold">₹{{ b.bidPriceKg | number:'1.2-2' }}</td>
                         <td class="text-muted">{{ b.bidTime }}</td>
                       </tr>
                     </tbody>
                   </table>
+
+                  <div *ngIf="!selectedAuction.bidsHistory || selectedAuction.bidsHistory.length === 0" class="p-3 text-center text-muted" style="background: #f8fafc; border-radius: 6px;">
+                    <i class="fa-solid fa-gavel text-muted" style="font-size: 1.5rem; display: block; margin-bottom: 0.35rem;"></i>
+                    <p style="margin: 0; font-size: 0.8rem;">No bids placed yet. Starting floor price is <strong>₹{{ selectedAuction.startingPriceKg | number:'1.2-2' }}/Kg</strong>. Place the first bid above!</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1030,7 +1091,7 @@ interface AuctionItem {
     }
   `]
 })
-export class BiddingComponent implements OnInit {
+export class BiddingComponent implements OnInit, OnDestroy {
   user: User | null = null;
   toastMsg = '';
   currentPage = 1;
@@ -1058,6 +1119,7 @@ export class BiddingComponent implements OnInit {
   auctions: AuctionItem[] = [];
 
   isMyBiddingsMode = false;
+  private timerInterval: any = null;
 
   constructor(
     private biddingService: BiddingService,
@@ -1093,31 +1155,78 @@ export class BiddingComponent implements OnInit {
       this.isMyBiddingsMode = params['mode'] === 'my';
     });
 
+    this.biddingService.biddings$.subscribe((bList) => {
+      const deletedIds = this.biddingService.getDeletedAuctionIds();
+      this.auctions = (bList || [])
+        .filter(a => !deletedIds.has(String(a.id)) && (a.status === 'OPEN' || !a.status))
+        .map(sa => this.mapServerAuctionToItem(sa));
+      this.updateCountdowns();
+    });
+
     this.biddingService.getActiveAuctions().subscribe({
       next: (serverAuctions) => {
+        const deletedIds = this.biddingService.getDeletedAuctionIds();
         if (serverAuctions && serverAuctions.length > 0) {
-          this.auctions = serverAuctions.map(sa => this.mapServerAuctionToItem(sa));
+          this.auctions = serverAuctions
+            .filter(a => !deletedIds.has(String(a.id)) && (a.status === 'OPEN' || !a.status))
+            .map(sa => this.mapServerAuctionToItem(sa));
         } else {
           this.auctions = [];
         }
+        this.updateCountdowns();
       },
       error: () => {
         this.auctions = [];
       }
     });
+
+    this.timerInterval = setInterval(() => {
+      this.updateCountdowns();
+    }, 1000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+    }
+  }
+
+  private updateCountdowns(): void {
+    const now = Date.now();
+    this.auctions.forEach(item => {
+      if (item.endTime) {
+        const end = new Date(item.endTime).getTime();
+        const diff = end - now;
+        if (diff <= 0) {
+          item.timeRemaining = '00 : 00 : 00';
+          item.isEndingSoon = true;
+        } else {
+          const hours = Math.floor(diff / (1000 * 60 * 60));
+          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+          const pad = (n: number) => n.toString().padStart(2, '0');
+          item.timeRemaining = `${pad(hours)} : ${pad(minutes)} : ${pad(seconds)}`;
+          item.isEndingSoon = diff < 3600000;
+        }
+      }
+    });
   }
 
   private mapServerAuctionToItem(sa: any): AuctionItem {
+    const startingPrice = sa.startingPrice || sa.startingBid || 20;
+    const currentBid = sa.currentHighestBid || sa.currentBid || startingPrice;
+    const endTime = sa.endTime || new Date(Date.now() + 8.5 * 3600000).toISOString();
     return {
       id: sa.id,
       cropName: sa.cropName || 'Fresh Harvest Crop',
       variety: sa.variety || 'Grade A Produce',
       grade: sa.grade || 'A Grade',
-      image: sa.imageUrl || '/assets/images/crop-rice.jpg',
+      image: sa.imageUrl || resolveCropImage(sa.cropName),
       location: sa.location || 'Local Mandi APMC',
       district: sa.district || 'Ludhiana',
       state: sa.state || 'Punjab',
-      currentBidKg: sa.currentBid || sa.startingBid || 20,
+      startingPriceKg: startingPrice,
+      currentBidKg: currentBid,
       totalQuantityKg: sa.quantity || 1000,
       farmerName: sa.farmerName || 'Verified Farmer',
       farmerPhone: sa.farmerPhone || '+91 98765 43210',
@@ -1128,6 +1237,7 @@ export class BiddingComponent implements OnInit {
       timeRemaining: '08 : 30 : 00',
       isEndingSoon: false,
       status: (sa.status as any) || 'OPEN',
+      endTime: endTime,
       bidsHistory: (sa.bids || []).map((b: any) => ({
         bidderName: b.bidderName || 'Dealer',
         bidPriceKg: b.bidAmount,
@@ -1268,8 +1378,10 @@ export class BiddingComponent implements OnInit {
       };
       this.invoiceService.createInvoice(invoicePayload).subscribe();
 
-      // 5. Close auction in BiddingService
+      // 5. Close and delete auction in BiddingService so it is removed from live bidding floor
       this.biddingService.closeAuction(item.id, orderId, fullStockTotal).subscribe();
+      this.biddingService.deleteAuction(item.id).subscribe();
+      this.auctions = this.auctions.filter(a => a.id !== item.id);
 
       // 6. Deduct or delete crop post from CropService if matching
       this.cropService.getAllCrops().subscribe(allCrops => {
@@ -1309,8 +1421,9 @@ export class BiddingComponent implements OnInit {
 
   cancelBid(item: AuctionItem): void {
     if (confirm(`Are you sure you want to cancel the bidding lot for "${item.cropName}"?`)) {
-      item.status = 'CLOSED';
-      this.toastMsg = `✓ Bidding lot for "${item.cropName}" has been cancelled.`;
+      this.biddingService.deleteAuction(item.id).subscribe();
+      this.auctions = this.auctions.filter(a => a.id !== item.id);
+      this.toastMsg = `✓ Bidding lot for "${item.cropName}" has been cancelled and removed from live bidding floor.`;
       setTimeout(() => this.toastMsg = '', 5000);
     }
   }
@@ -1344,6 +1457,12 @@ export class BiddingComponent implements OnInit {
     if (this.selectedAuction) {
       this.calculatedTotalAmount = Math.round((this.userBidPrice || 0) * this.selectedAuction.totalQuantityKg);
     }
+  }
+
+  setQuickBid(increment: number): void {
+    if (!this.selectedAuction) return;
+    this.userBidPrice = +(this.selectedAuction.currentBidKg + increment).toFixed(2);
+    this.onBidPriceChange();
   }
 
   submitBidOnAuction(): void {
@@ -1427,15 +1546,17 @@ export class BiddingComponent implements OnInit {
       return;
     }
 
+    const endIso = new Date(Date.now() + 12 * 3600000).toISOString();
     const newAuc: AuctionItem = {
       id: 'auc-' + Date.now(),
       cropName: this.newCropName,
       variety: 'Grade A Produce',
       grade: 'A Grade',
-      image: '/assets/images/crop-rice.jpg',
+      image: resolveCropImage(this.newCropName),
       location: 'Ludhiana, Punjab',
       district: 'Ludhiana',
       state: 'Punjab',
+      startingPriceKg: this.newStartingPriceKg,
       currentBidKg: this.newStartingPriceKg,
       totalQuantityKg: this.newQuantityKg,
       farmerName: this.user?.fullName || this.user?.username || 'Sardar Gurpreet Singh',
@@ -1447,21 +1568,23 @@ export class BiddingComponent implements OnInit {
       timeRemaining: '12 : 00 : 00',
       isEndingSoon: false,
       status: 'OPEN',
+      endTime: endIso,
       bidsHistory: []
     };
 
     this.auctions.unshift(newAuc);
+    this.updateCountdowns();
     this.biddingService.createAuction({
       id: newAuc.id,
       cropId: 'crop-' + newAuc.id,
       cropName: newAuc.cropName,
       variety: newAuc.variety,
       location: newAuc.location,
-      startingPrice: newAuc.currentBidKg,
+      startingPrice: newAuc.startingPriceKg,
       currentHighestBid: newAuc.currentBidKg,
       quantity: newAuc.totalQuantityKg,
       unit: 'Kg',
-      endTime: new Date(Date.now() + 12 * 3600000).toISOString(),
+      endTime: endIso,
       farmerName: newAuc.farmerName,
       farmerId: newAuc.farmerId,
       status: 'OPEN',

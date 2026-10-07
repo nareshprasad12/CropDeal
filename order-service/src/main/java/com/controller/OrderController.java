@@ -53,18 +53,30 @@ public class OrderController {
 
     @GetMapping("/dealer/{dealerId}")
     public ResponseEntity<List<OrderResponse>> getOrdersByDealer(
-            @PathVariable Long dealerId) {
-
+            @PathVariable String dealerId) {
+        Long id = 1L;
+        try {
+            String digits = dealerId.replaceAll("\\D+", "");
+            if (!digits.isEmpty()) {
+                id = Long.parseLong(digits);
+            }
+        } catch (Exception ignored) {}
         return ResponseEntity.ok(
-                orderService.getOrdersByDealer(dealerId));
+                orderService.getOrdersByDealer(id));
     }
 
     @GetMapping("/farmer/{farmerId}")
     public ResponseEntity<List<OrderResponse>> getOrdersByFarmer(
-            @PathVariable Long farmerId) {
-
+            @PathVariable String farmerId) {
+        Long id = 1L;
+        try {
+            String digits = farmerId.replaceAll("\\D+", "");
+            if (!digits.isEmpty()) {
+                id = Long.parseLong(digits);
+            }
+        } catch (Exception ignored) {}
         return ResponseEntity.ok(
-                orderService.getOrdersByFarmer(farmerId));
+                orderService.getOrdersByFarmer(id));
     }
 
     @PostMapping("/{id}/pay")

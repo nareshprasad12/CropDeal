@@ -189,7 +189,7 @@ export type PurchaseTypeFilter = 'ALL' | 'NORMAL' | 'BIDDING';
                 <tr *ngFor="let ord of pagedOrders">
                   <td><strong>{{ ord.id }}</strong></td>
                   <td><strong>{{ ord.cropName }}</strong></td>
-                  <td>{{ ord.dealerName || 'Apex Agro Mills Ltd' }}</td>
+                  <td>{{ ord.dealerName || 'Registered Dealer' }}</td>
                   <td>{{ ord.quantity }} {{ ord.unit || 'Kg' }}</td>
                   <td><strong class="text-emerald">&#8377; {{ ord.finalAmount | number:'1.2-2' }}</strong></td>
                   <td>{{ ord.createdAt | date:'mediumDate' }}</td>
@@ -348,7 +348,7 @@ export type PurchaseTypeFilter = 'ALL' | 'NORMAL' | 'BIDDING';
                 <tr *ngFor="let ord of pagedOrders">
                   <td><strong>{{ ord.id }}</strong></td>
                   <td><strong>{{ ord.cropName }}</strong></td>
-                  <td>{{ ord.farmerName || 'Sardar Gurpreet Singh' }}</td>
+                  <td>{{ ord.farmerName || 'Registered Farmer' }}</td>
                   <td>
                     <span class="badge" [ngClass]="ord.isBidding ? 'badge-bidding' : 'badge-normal'">
                       <i class="fa-solid" [ngClass]="ord.isBidding ? 'fa-gavel' : 'fa-basket-shopping'"></i>
@@ -1068,14 +1068,58 @@ export class ReportsComponent implements OnInit, OnDestroy {
   }
 
   loadReportsData(): void {
-    this.orderService.getAllOrders().subscribe({
-      next: (orders: Order[]) => {
-        this.allOrders = orders || [];
-      },
-      error: () => {
-        this.allOrders = [];
-      }
-    });
+    const uid = String(this.currentUser?.id || this.currentUser?.userId || '').trim();
+
+    if (this.userRole === 'FARMER' && uid) {
+      this.orderService.getOrdersByFarmer(uid).subscribe({
+        next: (orders) => {
+          this.orderService.getAllOrders().subscribe({
+            next: (all) => {
+              const merged = [...(orders || []), ...(all || [])];
+              this.allOrders = Array.from(new Map(merged.map(o => [String(o.id), o])).values());
+            },
+            error: () => {
+              this.allOrders = orders || [];
+            }
+          });
+        },
+        error: () => {
+          this.orderService.getAllOrders().subscribe({
+            next: (orders) => this.allOrders = orders || [],
+            error: () => this.allOrders = []
+          });
+        }
+      });
+    } else if (this.userRole === 'DEALER' && uid) {
+      this.orderService.getOrdersByDealer(uid).subscribe({
+        next: (orders) => {
+          this.orderService.getAllOrders().subscribe({
+            next: (all) => {
+              const merged = [...(orders || []), ...(all || [])];
+              this.allOrders = Array.from(new Map(merged.map(o => [String(o.id), o])).values());
+            },
+            error: () => {
+              this.allOrders = orders || [];
+            }
+          });
+        },
+        error: () => {
+          this.orderService.getAllOrders().subscribe({
+            next: (orders) => this.allOrders = orders || [],
+            error: () => this.allOrders = []
+          });
+        }
+      });
+    } else {
+      this.orderService.getAllOrders().subscribe({
+        next: (orders: Order[]) => {
+          this.allOrders = orders || [];
+        },
+        error: () => {
+          this.allOrders = [];
+        }
+      });
+    }
 
     this.deliveryService.getAllDeliveries().subscribe({
       next: (deliveries: Delivery[]) => {
@@ -1089,8 +1133,25 @@ export class ReportsComponent implements OnInit, OnDestroy {
 
   // --- FARMER CALCULATIONS ---
   get farmerAllOrders(): Order[] {
-    const uid = this.currentUser?.id || this.currentUser?.userId || 'farmer-1';
-    return this.allOrders.filter(o => o.farmerId === uid || this.effectiveRole === 'ADMIN' || this.isFarmer);
+    const uid = String(this.currentUser?.id || this.currentUser?.userId || '').trim();
+    const fullName = (this.currentUser?.fullName || '').trim().toLowerCase();
+    const username = (this.currentUser?.username || '').trim().toLowerCase();
+    const email = (this.currentUser?.email || '').trim().toLowerCase();
+
+    // If Admin is inspecting the aggregate Farmer view via admin tab switcher
+    if (this.isAdmin && this.activeAdminView === 'FARMER') {
+      return this.allOrders;
+    }
+
+    // For an actual farmer, ONLY return orders belonging to this specific farmer
+    return this.allOrders.filter(o => {
+      const fId = String(o.farmerId || '').trim();
+      const fName = (o.farmerName || '').trim().toLowerCase();
+      return (uid && fId === uid) ||
+             (fullName && fName === fullName) ||
+             (username && fName === username) ||
+             (email && fName === email);
+    });
   }
 
   get farmerDailyOrders(): Order[] {
@@ -1148,8 +1209,25 @@ export class ReportsComponent implements OnInit, OnDestroy {
 
   // --- DEALER CALCULATIONS ---
   get dealerAllOrders(): Order[] {
-    const uid = this.currentUser?.id || this.currentUser?.userId || 'dealer-1';
-    return this.allOrders.filter(o => o.dealerId === uid || this.effectiveRole === 'ADMIN' || this.isDealer);
+    const uid = String(this.currentUser?.id || this.currentUser?.userId || '').trim();
+    const fullName = (this.currentUser?.fullName || '').trim().toLowerCase();
+    const username = (this.currentUser?.username || '').trim().toLowerCase();
+    const email = (this.currentUser?.email || '').trim().toLowerCase();
+
+    // If Admin is inspecting the aggregate Dealer view via admin tab switcher
+    if (this.isAdmin && this.activeAdminView === 'DEALER') {
+      return this.allOrders;
+    }
+
+    // For an actual dealer, ONLY return orders belonging to this specific dealer
+    return this.allOrders.filter(o => {
+      const dId = String(o.dealerId || '').trim();
+      const dName = (o.dealerName || '').trim().toLowerCase();
+      return (uid && dId === uid) ||
+             (fullName && dName === fullName) ||
+             (username && dName === username) ||
+             (email && dName === email);
+    });
   }
 
   get dealerNormalOrders(): Order[] {
@@ -1209,10 +1287,26 @@ export class ReportsComponent implements OnInit, OnDestroy {
 
   // --- DELIVERY PARTNER CALCULATIONS ---
   get partnerDeliveries(): Delivery[] {
-    if (this.specificDateFilter) {
-      return this.allDeliveries.filter(d => (d.createdAt || '').startsWith(this.specificDateFilter));
+    const uid = String(this.currentUser?.id || this.currentUser?.userId || '').trim();
+    const fullName = (this.currentUser?.fullName || '').trim().toLowerCase();
+    const username = (this.currentUser?.username || '').trim().toLowerCase();
+
+    let list = this.allDeliveries;
+    if (!(this.isAdmin && this.activeAdminView === 'DELIVERY')) {
+      // For an actual delivery partner, ONLY show their own deliveries
+      list = list.filter(d => {
+        const pId = String(d.partnerId || '').trim();
+        const pName = (d.partnerName || '').trim().toLowerCase();
+        return (uid && pId === uid) ||
+               (fullName && pName === fullName) ||
+               (username && pName === username);
+      });
     }
-    return this.allDeliveries;
+
+    if (this.specificDateFilter) {
+      return list.filter(d => (d.createdAt || '').startsWith(this.specificDateFilter));
+    }
+    return list;
   }
 
   get partnerCompletedDeliveries(): Delivery[] {

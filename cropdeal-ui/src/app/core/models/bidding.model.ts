@@ -11,7 +11,7 @@ export interface BiddingAuction {
   quantity: number;
   unit: string;
   endTime: string;
-  status: 'OPEN' | 'CLOSED' | 'AWARDED';
+  status: 'OPEN' | 'CLOSED' | 'AWARDED' | 'BLOCKED' | 'CANCELLED';
   bidsCount: number;
   awardedOrderId?: string;
   awardedAmount?: number;
@@ -20,6 +20,7 @@ export interface BiddingAuction {
   location?: string;
   variety?: string;
   createdAt?: string;
+  bidsHistory?: Array<{ bidderName: string; bidPriceKg: number; bidTime: string }>;
 }
 
 export interface BidOffer {

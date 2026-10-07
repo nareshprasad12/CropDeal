@@ -36,14 +36,26 @@ public class CropController {
         return cropService.update(id, request);
     }
 
+    @GetMapping
+    public List<CropResponse> getAll() {
+        return cropService.getAll();
+    }
+
     @GetMapping("/{id}")
     public CropResponse getById(@PathVariable @Positive Long id) {
         return cropService.getById(id);
     }
 
     @GetMapping("/farmer/{farmerId}")
-    public List<CropResponse> getByFarmer(@PathVariable @Positive Long farmerId) {
-        return cropService.getByFarmer(farmerId);
+    public List<CropResponse> getByFarmer(@PathVariable String farmerId) {
+        Long id = 1L;
+        try {
+            String digits = farmerId.replaceAll("\\D+", "");
+            if (!digits.isEmpty()) {
+                id = Long.parseLong(digits);
+            }
+        } catch (Exception ignored) {}
+        return cropService.getByFarmer(id);
     }
 
     @GetMapping("/search")

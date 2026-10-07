@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, tap, catchError, of, map } from 'rxjs';
+import { BehaviorSubject, Observable, tap, catchError, of, map, throwError } from 'rxjs';
 import { AuthResponse, ForgotPasswordRequest, LoginRequest, RegisterRequest, User, UserRole, VerifyOtpRequest } from '../models/user.model';
 import { environment } from '../../../environments/environment';
 
@@ -34,39 +34,120 @@ export class AuthService {
   }
 
   login(credentials: LoginRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/login`, credentials).pipe(
+    const rawInput = (credentials.email || credentials.username || '').trim();
+    let emailToSend = rawInput;
+    let usernameToSend = credentials.username || '';
+
+    // Check if username was provided instead of email
+    if (rawInput && !rawInput.includes('@')) {
+      try {
+        const raw = localStorage.getItem('cropdeal_users_master');
+        if (raw) {
+          const list = JSON.parse(raw);
+          const matched = list.find((u: any) =>
+            u.username?.toLowerCase() === rawInput.toLowerCase() ||
+            u.email?.toLowerCase().startsWith(rawInput.toLowerCase() + '@')
+          );
+          if (matched && matched.email) {
+            emailToSend = matched.email;
+            usernameToSend = matched.username || usernameToSend;
+          }
+        }
+      } catch {}
+    }
+
+    const payload = {
+      email: emailToSend,
+      username: usernameToSend || rawInput,
+      password: credentials.password
+    };
+
+    return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/login`, payload).pipe(
       tap(res => {
         if (res && res.token) {
           localStorage.setItem(this.TOKEN_KEY, res.token);
+          const rawRole = String(res.role || 'DEALER').replace(/^ROLE_/, '') as UserRole;
+
+          // Retrieve master user details if available
+          let displayName = res.username || usernameToSend || res.email?.split('@')[0] || '';
+          let userPhone = '';
+          let userAddress = '';
+          try {
+            const raw = localStorage.getItem('cropdeal_users_master');
+            if (raw) {
+              const list = JSON.parse(raw);
+              const found = list.find((u: any) =>
+                u.email?.toLowerCase() === res.email?.toLowerCase() ||
+                u.username?.toLowerCase() === displayName.toLowerCase()
+              );
+              if (found) {
+                displayName = found.fullName || found.name || displayName;
+                userPhone = found.phone || '';
+                userAddress = found.address || '';
+              }
+            }
+          } catch {}
+
           const user: User = {
-            id: res.userId,
-            userId: res.userId,
-            username: res.username,
+            id: String(res.userId),
+            userId: String(res.userId),
+            username: res.username || usernameToSend || res.email?.split('@')[0] || '',
+            fullName: displayName,
             email: res.email || '',
-            role: res.role,
-            status: 'ACTIVE'
+            phone: userPhone,
+            address: userAddress,
+            role: rawRole,
+            status: 'ACTIVE',
+            isBlocked: false
           };
           localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+          this.syncMasterUser(user);
           this.currentUserSubject.next(user);
         }
+      }),
+      catchError(err => {
+        const msg = err.error?.message || err.error?.error || '';
+        if (msg.toLowerCase().includes('block') || msg.toLowerCase().includes('suspend')) {
+          return throwError(() => ({
+            status: 401,
+            error: { message: 'User account is blocked by administrator' }
+          }));
+        }
+        return throwError(() => err);
       })
     );
   }
 
   loginWithDemo(username: string, role: UserRole): void {
-    const token = 'cropdeal-jwt-token-' + role.toLowerCase() + '-' + Date.now();
-    localStorage.setItem(this.TOKEN_KEY, token);
-
     let masterUser: User | null = null;
     try {
       const raw = localStorage.getItem('cropdeal_users_master');
       if (raw) {
         const list = JSON.parse(raw);
         if (Array.isArray(list)) {
-          masterUser = list.find((u: any) => u.role === role) || null;
+          masterUser = list.find((u: any) =>
+            (u.username && u.username.toLowerCase() === username.toLowerCase()) ||
+            (u.email && u.email.toLowerCase() === (username.toLowerCase() + '@cropdeal.in'))
+          ) || null;
         }
       }
     } catch {}
+
+    // Heal demo accounts if stale blocked in localStorage
+    if (masterUser && ['farmer', 'dealer', 'delivery_partner', 'admin'].includes(username.toLowerCase())) {
+      if (masterUser.status === 'BLOCKED' || masterUser.isBlocked) {
+        masterUser.status = 'ACTIVE';
+        masterUser.isBlocked = false;
+        this.syncMasterUser(masterUser);
+      }
+    }
+
+    if (role !== 'ADMIN' && username.toLowerCase() !== 'admin' && masterUser && (masterUser.status === 'BLOCKED' || masterUser.isBlocked)) {
+      throw new Error('User account is blocked by administrator');
+    }
+
+    const token = 'cropdeal-jwt-token-' + role.toLowerCase() + '-' + Date.now();
+    localStorage.setItem(this.TOKEN_KEY, token);
 
     const user: User = masterUser ? {
       ...masterUser,
@@ -223,11 +304,67 @@ export class AuthService {
   }
 
   register(data: RegisterRequest): Observable<any> {
+    const cleanRole = String(data.role || 'FARMER').replace(/^ROLE_/, '') as UserRole;
+    const reqEmail = (data.email || '').trim().toLowerCase();
+    const reqUsername = (data.username || reqEmail.split('@')[0] || '').trim().toLowerCase();
+
+    // Check if user already exists in master storage
+    try {
+      const raw = localStorage.getItem('cropdeal_users_master');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          const exists = list.find((u: any) =>
+            (u.email && u.email.toLowerCase() === reqEmail) ||
+            (u.username && u.username.toLowerCase() === reqUsername)
+          );
+          if (exists) {
+            return throwError(() => ({
+              status: 409,
+              error: { message: 'Already registered, please login' }
+            }));
+          }
+        }
+      }
+    } catch {}
+
     const payload = {
       ...data,
-      name: data.name || data.fullName || data.username
+      email: reqEmail,
+      username: reqUsername,
+      name: data.name || data.fullName || data.username,
+      role: cleanRole
     };
-    return this.http.post(`${environment.apiUrl}/auth/register`, payload);
+
+    const masterUser: User = {
+      id: 'user-' + Date.now(),
+      userId: 'user-' + Date.now(),
+      username: reqUsername,
+      fullName: data.fullName || data.name || data.username,
+      email: reqEmail,
+      phone: data.phone,
+      address: data.address,
+      role: cleanRole,
+      status: 'ACTIVE',
+      isBlocked: false
+    };
+
+    return this.http.post(`${environment.apiUrl}/auth/register`, payload).pipe(
+      tap(() => {
+        // Sync master user ONLY upon successful registration
+        this.syncMasterUser(masterUser);
+      }),
+      catchError(err => {
+        const msg = err.error?.message || err.error?.error || '';
+        if (err.status === 409 || msg.toLowerCase().includes('already') || msg.toLowerCase().includes('exist')) {
+          return throwError(() => ({
+            status: 409,
+            error: { message: 'Already registered, please login' }
+          }));
+        }
+        return throwError(() => err);
+      })
+    );
   }
 
   forgotPassword(data: ForgotPasswordRequest): Observable<any> {
@@ -236,16 +373,29 @@ export class AuthService {
 
   sendPasswordResetOtp(email: string): Observable<any> {
     const cleanEmail = (email || '').trim().toLowerCase();
-    const generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
-    const otpData = {
-      otp: generatedOtp,
-      expiry: Date.now() + 15 * 60 * 1000,
-      email: cleanEmail
-    };
-    localStorage.setItem(`cropdeal_otp_${cleanEmail}`, JSON.stringify(otpData));
 
-    return this.http.post(`${environment.apiUrl}/auth/forgot-password`, { email: cleanEmail }).pipe(
+    return this.http.post<any>(`${environment.apiUrl}/auth/forgot-password`, { email: cleanEmail }).pipe(
+      tap(res => {
+        if (res && res.message) {
+          const match = res.message.match(/(\d{6})/);
+          if (match) {
+            const otpData = {
+              otp: match[1],
+              expiry: Date.now() + 15 * 60 * 1000,
+              email: cleanEmail
+            };
+            localStorage.setItem(`cropdeal_otp_${cleanEmail}`, JSON.stringify(otpData));
+          }
+        }
+      }),
       catchError(() => {
+        const generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
+        const otpData = {
+          otp: generatedOtp,
+          expiry: Date.now() + 15 * 60 * 1000,
+          email: cleanEmail
+        };
+        localStorage.setItem(`cropdeal_otp_${cleanEmail}`, JSON.stringify(otpData));
         return of({ message: `Password reset OTP generated: ${generatedOtp}`, otp: generatedOtp });
       })
     );
@@ -309,6 +459,33 @@ export class AuthService {
 
   verifyOtpAndResetPassword(data: VerifyOtpRequest): Observable<any> {
     return this.http.post(`${environment.apiUrl}/auth/verify-otp`, data);
+  }
+
+  changePassword(currentPassword: string, newPassword: string): Observable<any> {
+    const user = this.currentUserSubject.value;
+    const email = user?.email || user?.username || '';
+    return this.http.post<any>(`${environment.apiUrl}/auth/change-password`, {
+      email,
+      currentPassword,
+      newPassword
+    }).pipe(
+      tap(() => {
+        try {
+          const raw = localStorage.getItem('cropdeal_users_master');
+          if (raw) {
+            const list = JSON.parse(raw);
+            const idx = list.findIndex((u: any) =>
+              (u.email && u.email.toLowerCase() === email.toLowerCase()) ||
+              (u.username && u.username.toLowerCase() === email.toLowerCase())
+            );
+            if (idx >= 0) {
+              list[idx].password = newPassword;
+              localStorage.setItem('cropdeal_users_master', JSON.stringify(list));
+            }
+          }
+        } catch {}
+      })
+    );
   }
 
   logout(): void {

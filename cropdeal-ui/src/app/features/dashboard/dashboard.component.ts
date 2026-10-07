@@ -850,12 +850,22 @@ export class DashboardComponent implements OnInit {
 
         // 1. Farmer Dynamic Metrics
         if (u.role === 'FARMER') {
+          const uid = String(u.id || u.userId || '').trim();
+          const uName = (u.fullName || u.username || '').toLowerCase().trim();
           this.cropService.crops$.subscribe((crops: any[]) => {
-            const myCrops = (crops || []).filter((c: any) => c.farmerId === uid || c.farmerName === u.fullName);
+            const myCrops = (crops || []).filter((c: any) => {
+              const cFid = String(c.farmerId || '').trim();
+              const cFname = (c.farmerName || '').toLowerCase().trim();
+              return (uid && cFid && cFid === uid) || (uName && cFname && uName === cFname);
+            });
             this.totalCropsCount = myCrops.length;
           });
           this.orderService.orders$.subscribe((orders: any[]) => {
-            const myOrders = (orders || []).filter((o: any) => o.farmerId === uid || (o.farmerName && u.fullName && o.farmerName.toLowerCase().includes(u.fullName.toLowerCase())));
+            const myOrders = (orders || []).filter((o: any) => {
+              const oFid = String(o.farmerId || '').trim();
+              const oFname = (o.farmerName || '').toLowerCase().trim();
+              return (uid && oFid && oFid === uid) || (uName && oFname && uName === oFname);
+            });
             this.totalOrdersCount = myOrders.length;
             this.totalRevenue = myOrders.reduce((sum: number, o: any) => sum + (o.finalAmount || o.totalPrice || 0), 0);
             this.biddingRevenue = myOrders.filter((o: any) => o.isBidding).reduce((sum: number, o: any) => sum + (o.finalAmount || o.totalPrice || 0), 0);
@@ -864,12 +874,18 @@ export class DashboardComponent implements OnInit {
 
         // 2. Dealer Dynamic Metrics
         if (u.role === 'DEALER') {
+          const uid = String(u.id || u.userId || '').trim();
+          const uName = (u.fullName || u.username || '').toLowerCase().trim();
           this.orderService.orders$.subscribe((orders: any[]) => {
-            const myOrders = (orders || []).filter((o: any) => o.dealerId === uid || (o.dealerName && u.fullName && o.dealerName.toLowerCase().includes(u.fullName.toLowerCase())));
+            const myOrders = (orders || []).filter((o: any) => {
+              const oDid = String(o.dealerId || '').trim();
+              const oDname = (o.buyerName || o.dealerName || '').toLowerCase().trim();
+              return (uid && oDid && oDid === uid) || (uName && oDname && uName === oDname);
+            });
             this.dealerTotalOrders = myOrders.length;
           });
           this.biddingService.getActiveAuctions().subscribe((auctions: any[]) => {
-            const myBids = (auctions || []).filter((a: any) => a.highestBidderId === uid);
+            const myBids = (auctions || []).filter((a: any) => String(a.highestBidderId) === uid);
             this.dealerMyBiddings = myBids.length;
             this.dealerActiveBids = myBids.filter((a: any) => a.status === 'OPEN').length;
           });

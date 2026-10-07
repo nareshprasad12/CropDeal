@@ -1629,15 +1629,22 @@ export class CropListComponent implements OnInit {
   }
 
   get filteredCrops(): Crop[] {
+    const deletedIds = this.cropService.getDeletedCropIds();
     return this.crops.filter(c => {
+      const cId = String(c.id || c.cropId || '');
+      if (deletedIds.has(cId)) return false;
+      // Hide blocked crops for all normal marketplace viewers
+      if (this.user?.role !== 'ADMIN' && c.status === 'BLOCKED') {
+        return false;
+      }
       // If My Crops mode is active for FARMER, only show their own crops
       if (this.isMyCropsOnly && this.user?.role === 'FARMER' && !this.isMyCrop(c)) {
         return false;
       }
-      const matchCat = this.selectedCategory === 'All' || c.cropType.toLowerCase() === this.selectedCategory.toLowerCase();
+      const matchCat = this.selectedCategory === 'All' || (c.cropType || '').toLowerCase() === this.selectedCategory.toLowerCase();
       const matchQuery = !this.searchQuery.trim() ||
-        c.cropName.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-        c.location.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+        (c.cropName || '').toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+        (c.location || '').toLowerCase().includes(this.searchQuery.toLowerCase()) ||
         (c.farmerName && c.farmerName.toLowerCase().includes(this.searchQuery.toLowerCase()));
       return matchCat && matchQuery;
     });
@@ -2110,13 +2117,18 @@ export class CropListComponent implements OnInit {
 
   isMyCrop(crop: Crop): boolean {
     if (!this.user || this.user.role !== 'FARMER') return false;
-    const currentName = (this.user.fullName || this.user.username || '').toLowerCase();
-    const cropFarmer = (crop.farmerName || '').toLowerCase();
-    return Boolean(
-      (crop.farmerId && (crop.farmerId === this.user.id || crop.farmerId === this.user.userId)) ||
-      (currentName && cropFarmer && cropFarmer.includes(currentName)) ||
-      (cropFarmer && currentName && currentName.includes(cropFarmer))
-    );
+    const currentName = (this.user.fullName || this.user.username || '').toLowerCase().trim();
+    const cropFarmer = (crop.farmerName || '').toLowerCase().trim();
+    const currentId = String(this.user.id || this.user.userId || '').trim();
+    const cropFarmerId = String(crop.farmerId || '').trim();
+
+    if (currentId && cropFarmerId && currentId === cropFarmerId) {
+      return true;
+    }
+    if (currentName && cropFarmer && currentName === cropFarmer) {
+      return true;
+    }
+    return false;
   }
 
   openEditCropModal(crop: Crop): void {

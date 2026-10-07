@@ -5,5 +5,6 @@ public enum BiddingStatus {
     OPEN,
     CLOSED,
     SOLD,
-    CANCELLED
+    CANCELLED,
+    BLOCKED
 }

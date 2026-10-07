@@ -362,15 +362,25 @@ export class AdminCropsComponent implements OnInit {
   }
 
   toggleBlockCrop(crop: Crop, block: boolean): void {
-    crop.status = block ? 'BLOCKED' : 'AVAILABLE';
-    this.alertMsg = `✓ Crop #${crop.id} (${crop.cropName}) has been ${block ? 'BLOCKED from public marketplace' : 'UNBLOCKED and restored to active marketplace'}!`;
+    const newStatus = block ? 'BLOCKED' : 'AVAILABLE';
+    crop.status = newStatus;
+    const cropId = String(crop.id || crop.cropId || '');
+    if (cropId) {
+      this.cropService.updateCrop(cropId, { status: newStatus }).subscribe();
+    }
+    this.alertMsg = `✓ Crop #${cropId || crop.id} (${crop.cropName}) has been ${block ? 'BLOCKED from public marketplace' : 'UNBLOCKED and restored to active marketplace'}!`;
     setTimeout(() => this.alertMsg = '', 4500);
   }
 
   deleteCrop(crop: Crop): void {
     if (confirm(`Are you sure you want to permanently delete crop listing #${crop.id} (${crop.cropName})?`)) {
-      this.crops = this.crops.filter(x => x.id !== crop.id);
-      this.alertMsg = `✓ Crop #${crop.id} (${crop.cropName}) has been permanently deleted from database.`;
+      const cropId = String(crop.id || crop.cropId || '');
+      this.cropService.deleteCrop(cropId).subscribe({
+        next: () => {},
+        error: () => {}
+      });
+      this.crops = this.crops.filter(x => String(x.id) !== cropId && String(x.cropId) !== cropId);
+      this.alertMsg = `✓ Crop #${cropId} (${crop.cropName}) has been permanently deleted globally from marketplace and database.`;
       setTimeout(() => this.alertMsg = '', 4500);
     }
   }

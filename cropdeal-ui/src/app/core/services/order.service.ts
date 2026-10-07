@@ -48,19 +48,60 @@ export class OrderService {
     } catch {}
   }
 
+  public mapBackendOrder(o: any): Order {
+    if (!o) return {} as Order;
+    const id = o.id !== undefined && o.id !== null ? String(o.id) : (o.orderNumber || ('ORD-' + Date.now()));
+    const qty = Number(o.quantity) || 1;
+    const unitPrice = Number(o.pricePerUnit !== undefined ? o.pricePerUnit : (o.ratePerKg || (o.totalPrice ? o.totalPrice / qty : 25)));
+    const total = Number(o.totalPrice !== undefined ? o.totalPrice : (o.finalAmount || (unitPrice * qty)));
+    const finalAmt = Number(o.finalAmount !== undefined ? o.finalAmount : total);
+
+    return {
+      id,
+      cropId: o.cropId !== undefined ? String(o.cropId) : '1',
+      cropName: o.cropName || 'Harvest Crop',
+      farmerId: o.farmerId !== undefined ? String(o.farmerId) : '1',
+      farmerName: o.farmerName || 'Farmer Producer',
+      farmerPhone: o.farmerPhone,
+      farmerLocation: o.farmerLocation,
+      dealerId: o.dealerId !== undefined ? String(o.dealerId) : '2',
+      dealerName: o.dealerName || o.buyerName || 'Commercial Dealer',
+      dealerPhone: o.dealerPhone,
+      quantity: qty,
+      unit: o.unit || 'Kg',
+      pricePerUnit: unitPrice,
+      govMspPrice: o.govMspPrice,
+      totalPrice: total,
+      taxAmount: o.taxAmount || Math.round(total * 0.05),
+      deliveryFee: o.deliveryFee || 0,
+      finalAmount: finalAmt,
+      fulfillmentType: o.fulfillmentType || 'DELIVERY_AGENT',
+      distanceKm: o.distanceKm,
+      paymentMethod: o.paymentMethod || 'Institutional Escrow',
+      transactionId: o.transactionId,
+      status: (o.status || 'PAID') as any,
+      deliveryAddress: o.deliveryAddress || 'APMC Delivery Terminal',
+      deliveryPartnerId: o.deliveryAgentId ? String(o.deliveryAgentId) : undefined,
+      createdAt: o.createdAt || new Date().toISOString(),
+      invoiceId: o.invoiceId,
+      isBidding: o.isBidding ?? false
+    };
+  }
+
   createOrder(req: CreateOrderRequest): Observable<Order> {
     const orderId = (req as any).id || (req as any).orderId || ('ORD-' + Math.floor(10000 + Math.random() * 90000));
+    const unitRate = req.pricePerUnit || Math.round(req.totalPrice / (req.quantity || 1));
     const newOrder: Order = {
       id: orderId,
       cropId: req.cropId,
       cropName: req.cropName || 'Harvest Crop',
-      farmerId: req.farmerId || 'farmer-1',
-      farmerName: req.farmerName || 'Sardar Gurpreet Singh',
+      farmerId: req.farmerId || '1',
+      farmerName: req.farmerName || 'Farmer Producer',
       dealerId: req.dealerId,
-      dealerName: req.dealerName || 'Apex Agro Mills Ltd',
+      dealerName: req.dealerName || 'Commercial Dealer',
       quantity: req.quantity,
       unit: req.unit || 'Kg',
-      pricePerUnit: req.pricePerUnit || Math.round(req.totalPrice / (req.quantity || 1)),
+      pricePerUnit: unitRate,
       govMspPrice: req.govMspPrice,
       totalPrice: req.totalPrice,
       taxAmount: req.taxAmount || Math.round(req.totalPrice * 0.05),
@@ -76,14 +117,29 @@ export class OrderService {
       createdAt: new Date().toISOString()
     };
 
-    return this.http.post<Order>(this.baseUrl, req).pipe(
-      tap((saved) => {
-        const orderToSave = { ...newOrder, ...saved, id: (saved && saved.id) ? saved.id : orderId };
-        const current = [orderToSave, ...this.ordersSubject.value];
+    const payload: any = {
+      ...req,
+      unitPrice: unitRate,
+      pricePerUnit: unitRate,
+      totalPrice: req.totalPrice,
+      dealerName: req.dealerName,
+      farmerName: req.farmerName,
+      deliveryAddress: req.deliveryAddress,
+      fulfillmentType: req.fulfillmentType,
+      paymentMethod: req.paymentMethod,
+      transactionId: req.transactionId,
+      isBidding: req.isBidding
+    };
+
+    return this.http.post<any>(this.baseUrl, payload).pipe(
+      map((saved) => {
+        const orderToSave = this.mapBackendOrder(saved || newOrder);
+        const current = [orderToSave, ...this.ordersSubject.value.filter(o => o.id !== orderToSave.id)];
         this.saveOrders(current);
+        return orderToSave;
       }),
       catchError(() => {
-        const current = [newOrder, ...this.ordersSubject.value];
+        const current = [newOrder, ...this.ordersSubject.value.filter(o => o.id !== newOrder.id)];
         this.saveOrders(current);
         return of(newOrder);
       })
@@ -91,7 +147,8 @@ export class OrderService {
   }
 
   getOrderById(orderId: string): Observable<Order> {
-    return this.http.get<Order>(`${this.baseUrl}/${orderId}`).pipe(
+    return this.http.get<any>(`${this.baseUrl}/${orderId}`).pipe(
+      map(res => this.mapBackendOrder(res)),
       catchError(() => {
         const found = this.ordersSubject.value.find(o => o.id === orderId);
         return of(found as Order);
@@ -100,28 +157,45 @@ export class OrderService {
   }
 
   getOrdersByDealer(dealerId: string): Observable<Order[]> {
-    return this.http.get<Order[]>(`${this.baseUrl}/dealer/${dealerId}`).pipe(
+    const dId = String(dealerId).trim();
+    return this.http.get<any[]>(`${this.baseUrl}/dealer/${dId}`).pipe(
+      map(items => {
+        if (Array.isArray(items)) {
+          return items.map(o => this.mapBackendOrder(o));
+        }
+        return this.ordersSubject.value.filter(o => String(o.dealerId) === dId);
+      }),
       catchError(() => {
-        return of(this.ordersSubject.value.filter(o => o.dealerId === dealerId));
+        return of(this.ordersSubject.value.filter(o => String(o.dealerId) === dId));
       })
     );
   }
 
   getOrdersByFarmer(farmerId: string): Observable<Order[]> {
-    return this.http.get<Order[]>(`${this.baseUrl}/farmer/${farmerId}`).pipe(
+    const fId = String(farmerId).trim();
+    return this.http.get<any[]>(`${this.baseUrl}/farmer/${fId}`).pipe(
+      map(items => {
+        if (Array.isArray(items)) {
+          return items.map(o => this.mapBackendOrder(o));
+        }
+        return this.ordersSubject.value.filter(o => String(o.farmerId) === fId);
+      }),
       catchError(() => {
-        return of(this.ordersSubject.value.filter(o => o.farmerId === farmerId));
+        return of(this.ordersSubject.value.filter(o => String(o.farmerId) === fId));
       })
     );
   }
 
   getAllOrders(): Observable<Order[]> {
-    return this.http.get<Order[]>(this.baseUrl).pipe(
+    return this.http.get<any[]>(this.baseUrl).pipe(
       map(backendList => {
-        if (backendList && backendList.length > 0) {
-          const ids = new Set(backendList.map(o => o.id));
+        if (Array.isArray(backendList) && backendList.length > 0) {
+          const mapped = backendList.map(o => this.mapBackendOrder(o));
+          const ids = new Set(mapped.map(o => o.id));
           const localOnly = this.ordersSubject.value.filter(o => !ids.has(o.id));
-          return [...localOnly, ...backendList];
+          const combined = [...mapped, ...localOnly];
+          this.saveOrders(combined);
+          return combined;
         }
         return this.ordersSubject.value;
       }),

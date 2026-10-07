@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BiddingService } from '../../core/services/bidding.service';
+import { resolveCropImage } from '../../core/utils/crop-image.util';
 
 export interface AdminAuctionItem {
   id: string;
@@ -64,10 +65,9 @@ export interface AdminAuctionItem {
           </div>
           <div class="filter-controls">
             <select [(ngModel)]="statusFilter" class="form-control">
-              <option value="ALL">All Status</option>
+              <option value="ALL">All Active Floors</option>
               <option value="OPEN">Live / Open Floors</option>
               <option value="BLOCKED">Blocked</option>
-              <option value="CLOSED">Closed / Sold</option>
             </select>
           </div>
         </div>
@@ -355,26 +355,28 @@ export class AdminBiddingsComponent implements OnInit {
   }
 
   loadAuctions(): void {
-    this.biddingService.getActiveAuctions().subscribe({
+    this.biddingService.getAllAuctions().subscribe({
       next: (data) => {
-        this.auctions = (data || []).map(a => ({
-          id: a.id,
-          cropName: a.cropName || 'Auction Lot',
-          variety: 'Grade A Produce',
-          grade: 'Grade A',
-          totalQuantityKg: a.quantity || 1000,
-          startingPriceKg: a.startingPrice || 20,
-          currentBidKg: a.currentHighestBid || a.startingPrice || 20,
-          farmerName: a.farmerName || 'Registered Farmer',
-          farmerPhone: '+91 98000 00000',
-          location: 'Agricultural Mandi Yard',
-          highestBidderDealer: a.highestBidderName || 'None',
-          bidsCount: a.bidsCount || 0,
-          endTime: a.endTime ? new Date(a.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Open',
-          status: (a.status as any) || 'OPEN',
-          image: '/assets/images/crop-wheat.jpg',
-          bidsHistory: []
-        }));
+        this.auctions = (data || [])
+          .filter(a => a.status !== 'CLOSED' && (a.status as string) !== 'AWARDED')
+          .map(a => ({
+            id: a.id,
+            cropName: a.cropName || 'Auction Lot',
+            variety: 'Grade A Produce',
+            grade: 'Grade A',
+            totalQuantityKg: a.quantity || 1000,
+            startingPriceKg: a.startingPrice || 20,
+            currentBidKg: a.currentHighestBid || a.startingPrice || 20,
+            farmerName: a.farmerName || 'Registered Farmer',
+            farmerPhone: '+91 98000 00000',
+            location: 'Agricultural Mandi Yard',
+            highestBidderDealer: a.highestBidderName || 'None',
+            bidsCount: a.bidsCount || 0,
+            endTime: a.endTime ? new Date(a.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Open',
+            status: (a.status as any) || 'OPEN',
+            image: resolveCropImage(a.cropName),
+            bidsHistory: a.bidsHistory || []
+          }));
       },
       error: () => {
         this.auctions = [];
@@ -407,14 +409,16 @@ export class AdminBiddingsComponent implements OnInit {
 
   toggleBlockAuction(auction: AdminAuctionItem, block: boolean): void {
     auction.status = block ? 'BLOCKED' : 'OPEN';
+    this.biddingService.toggleBlockAuction(auction.id, block).subscribe();
     this.alertMsg = `✓ Auction #${auction.id} (${auction.cropName}) has been ${block ? 'BLOCKED from accepting bids' : 'UNBLOCKED and opened for live bidding'}!`;
     setTimeout(() => this.alertMsg = '', 4500);
   }
 
   deleteAuction(auction: AdminAuctionItem): void {
     if (confirm(`Are you sure you want to permanently delete auction floor #${auction.id} (${auction.cropName})?`)) {
+      this.biddingService.deleteAuction(auction.id).subscribe();
       this.auctions = this.auctions.filter(x => x.id !== auction.id);
-      this.alertMsg = `✓ Auction floor #${auction.id} (${auction.cropName}) has been permanently deleted from database.`;
+      this.alertMsg = `✓ Auction floor #${auction.id} (${auction.cropName}) has been permanently deleted globally from database and trading floors.`;
       setTimeout(() => this.alertMsg = '', 4500);
     }
   }

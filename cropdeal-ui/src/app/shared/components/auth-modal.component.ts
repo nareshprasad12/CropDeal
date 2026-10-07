@@ -844,12 +844,38 @@ export class AuthModalComponent implements OnInit {
   }
 
   quickLogin(username: string, role: UserRole): void {
-    this.authService.loginWithDemo(username, role);
-    this.successMsg = `Logged in successfully as ${role}!`;
-    setTimeout(() => {
-      this.close();
-      this.router.navigate(['/']);
-    }, 400);
+    const raw = localStorage.getItem('cropdeal_users_master');
+    if (raw) {
+      try {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          const match = list.find((item: any) =>
+            (item.username && item.username.toLowerCase() === username.toLowerCase()) ||
+            (item.email && item.email.toLowerCase() === (username.toLowerCase() + '@cropdeal.in'))
+          );
+          if (role !== 'ADMIN' && username.toLowerCase() !== 'admin' && match && (match.status === 'BLOCKED' || match.isBlocked)) {
+            this.errorMsg = `🚫 Access Denied: User account (${role}) is blocked by administrator. Please contact support.`;
+            return;
+          }
+        }
+      } catch {}
+    }
+
+    try {
+      this.authService.loginWithDemo(username, role);
+      this.successMsg = `Logged in successfully as ${role}!`;
+      setTimeout(() => {
+        this.close();
+        this.router.navigate(['/']);
+      }, 400);
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (msg.toLowerCase().includes('block')) {
+        this.errorMsg = '🚫 Access Denied: User account is blocked by administrator. Please contact support.';
+      } else {
+        this.errorMsg = msg || 'Login failed. Please check credentials.';
+      }
+    }
   }
 
   submitLogin(): void {
@@ -860,34 +886,64 @@ export class AuthModalComponent implements OnInit {
     this.isSubmitting = true;
     this.errorMsg = '';
 
-    // Check if credentials match any demo user for convenience
-    const em = this.loginEmail.toLowerCase();
-    if (em.includes('farmer') || em.includes('gurpreet')) {
+    const input = this.loginEmail.trim();
+    const pass = this.loginPassword.trim();
+
+    // Check if user is blocked
+    try {
+      const raw = localStorage.getItem('cropdeal_users_master');
+      if (raw) {
+        const list = JSON.parse(raw);
+        const match = list.find((u: any) =>
+          (u.email && u.email.toLowerCase() === input.toLowerCase()) ||
+          (u.username && u.username.toLowerCase() === input.toLowerCase())
+        );
+        if (match && (match.status === 'BLOCKED' || match.isBlocked)) {
+          this.errorMsg = '🚫 Access Denied: User account is blocked by administrator. Please contact support.';
+          this.isSubmitting = false;
+          return;
+        }
+      }
+    } catch {}
+
+    // Support quick demo logins only when matching exact demo credentials
+    if (input.toLowerCase() === 'farmer' && pass === 'farmer123') {
       this.quickLogin('farmer', 'FARMER');
+      this.isSubmitting = false;
       return;
-    } else if (em.includes('dealer') || em.includes('mohan')) {
+    } else if (input.toLowerCase() === 'dealer' && pass === 'dealer123') {
       this.quickLogin('dealer', 'DEALER');
+      this.isSubmitting = false;
       return;
-    } else if (em.includes('delivery')) {
+    } else if ((input.toLowerCase() === 'delivery' || input.toLowerCase() === 'delivery_partner') && pass === 'partner123') {
       this.quickLogin('delivery', 'DELIVERY_PARTNER');
+      this.isSubmitting = false;
       return;
-    } else if (em.includes('admin')) {
+    } else if (input.toLowerCase() === 'admin' && pass === 'admin123') {
       this.quickLogin('admin', 'ADMIN');
+      this.isSubmitting = false;
       return;
     }
 
-    this.authService.login({ username: this.loginEmail, password: this.loginPassword }).subscribe({
+    const isEmail = input.includes('@');
+    this.authService.login({
+      username: input,
+      email: isEmail ? input : undefined,
+      password: pass
+    }).subscribe({
       next: () => {
         this.isSubmitting = false;
         this.close();
         this.router.navigate(['/']);
       },
-      error: () => {
-        // Fallback for seamless demo
-        this.authService.loginWithDemo(this.loginEmail, 'DEALER');
+      error: (err: any) => {
         this.isSubmitting = false;
-        this.close();
-        this.router.navigate(['/']);
+        const msg = err.error?.message || err.error?.error || '';
+        if (msg.toLowerCase().includes('block') || msg.toLowerCase().includes('suspend')) {
+          this.errorMsg = '🚫 Access Denied: User account is blocked by administrator. Please contact support.';
+        } else {
+          this.errorMsg = msg || 'Invalid credentials. Please verify your email/username and password.';
+        }
       }
     });
   }
@@ -897,33 +953,93 @@ export class AuthModalComponent implements OnInit {
       this.errorMsg = 'Please complete all required fields.';
       return;
     }
+
+    if (this.regPassword.length < 8) {
+      this.errorMsg = 'Password must be at least 8 characters long.';
+      return;
+    }
+
+    let cleanPhone = (this.regPhone || '').replace(/\D/g, '');
+    if (cleanPhone.length > 10 && cleanPhone.startsWith('91')) {
+      cleanPhone = cleanPhone.substring(2);
+    } else if (cleanPhone.length > 10 && cleanPhone.startsWith('0')) {
+      cleanPhone = cleanPhone.substring(1);
+    }
+    if (cleanPhone.length > 10) {
+      cleanPhone = cleanPhone.slice(-10);
+    }
+
+    const indianMobileRegex = /^[6-9][0-9]{9}$/;
+    if (!indianMobileRegex.test(cleanPhone)) {
+      this.errorMsg = 'Please provide a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.';
+      return;
+    }
+
+    const emailTrim = this.regEmail.trim();
+    const usernameTrim = emailTrim.split('@')[0];
+    const displayName = this.regFullName.trim();
+
+    // Pre-check if already registered
+    try {
+      const raw = localStorage.getItem('cropdeal_users_master');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          const match = list.find((u: any) =>
+            (u.email && u.email.toLowerCase() === emailTrim.toLowerCase()) ||
+            (u.username && u.username.toLowerCase() === usernameTrim.toLowerCase())
+          );
+          if (match) {
+            this.errorMsg = 'Already registered, please login';
+            return;
+          }
+        }
+      }
+    } catch {}
+
     this.isSubmitting = true;
     this.errorMsg = '';
 
     this.authService.register({
-      username: this.regEmail.split('@')[0],
-      email: this.regEmail,
+      username: usernameTrim,
+      email: emailTrim,
       password: this.regPassword,
       role: this.regRole,
-      fullName: this.regFullName,
-      name: this.regFullName,
-      phone: this.regPhone
+      fullName: displayName,
+      name: displayName,
+      phone: cleanPhone
     }).subscribe({
       next: () => {
         this.isSubmitting = false;
         this.successMsg = 'Account registered successfully! Logging you in...';
-        setTimeout(() => {
-          this.authService.loginWithDemo(this.regEmail.split('@')[0], this.regRole);
-          this.close();
-          this.router.navigate(['/']);
-        }, 600);
+        this.authService.login({
+          username: usernameTrim,
+          email: emailTrim,
+          password: this.regPassword
+        }).subscribe({
+          next: () => {
+            setTimeout(() => {
+              this.close();
+              this.router.navigate(['/']);
+            }, 600);
+          },
+          error: () => {
+            setTimeout(() => {
+              this.activeTab = 'login';
+              this.loginEmail = emailTrim;
+              this.loginPassword = this.regPassword;
+            }, 800);
+          }
+        });
       },
-      error: () => {
-        // Fallback for client side
+      error: (err: any) => {
         this.isSubmitting = false;
-        this.authService.loginWithDemo(this.regEmail.split('@')[0], this.regRole);
-        this.close();
-        this.router.navigate(['/']);
+        const msg = err.error?.message || err.error?.error || '';
+        if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('exist') || err.status === 409) {
+          this.errorMsg = 'Already registered, please login';
+        } else {
+          this.errorMsg = msg || 'Registration failed. Please check your details.';
+        }
       }
     });
   }

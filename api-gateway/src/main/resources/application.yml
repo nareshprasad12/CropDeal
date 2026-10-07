@@ -65,7 +65,7 @@ spring:
         - id: delivery-service
           uri: lb://deliveryservice
           predicates:
-            - Path=/api/deliveries/**, /api/delivery-agents/**
+            - Path=/api/deliveries/**,/api/delivery-agents/**
 
         - id: notification-service
           uri: lb://notification-service
@@ -75,12 +75,12 @@ spring:
         - id: chatbot-service
           uri: lb://chatbot-service
           predicates:
-            - Path=/api/chat/**, /api/chatbot/**, /api/v1/chatbot/**
+            - Path=/api/chat/**,/api/chatbot/**,/api/v1/chatbot/**
 
         - id: price-alert-service
           uri: lb://price-alert-service
           predicates:
-            - Path=/api/price-alerts/**, /api/buying-requests/**
+            - Path=/api/price-alerts/**,/api/buying-requests/**
 
         - id: report-service
           uri: lb://report-service

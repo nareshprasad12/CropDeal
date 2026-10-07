@@ -56,14 +56,20 @@ public class OrderServiceImpl implements OrderService {
         order.setCropName(request.getCropName());
         order.setQuantity(request.getQuantity());
         order.setUnitPrice(request.getUnitPrice());
+        order.setDealerName(request.getDealerName());
+        order.setFarmerName(request.getFarmerName());
+        order.setDeliveryAddress(request.getDeliveryAddress());
+        order.setFulfillmentType(request.getFulfillmentType());
+        order.setPaymentMethod(request.getPaymentMethod());
+        order.setTransactionId(request.getTransactionId());
+        order.setIsBidding(request.getIsBidding());
 
-        BigDecimal totalAmount =
-                request.getUnitPrice()
-                        .multiply(BigDecimal.valueOf(request.getQuantity()));
+        BigDecimal totalAmount = request.getTotalPrice() != null ? request.getTotalPrice() :
+                request.getUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity()));
 
         order.setTotalAmount(totalAmount);
 
-        order.setStatus(OrderStatus.CREATED);
+        order.setStatus(OrderStatus.PAID);
 
         Order savedOrder = orderRepository.save(order);
 
@@ -353,6 +359,14 @@ public class OrderServiceImpl implements OrderService {
         response.setQuantity(order.getQuantity());
         response.setUnitPrice(order.getUnitPrice());
         response.setTotalAmount(order.getTotalAmount());
+
+        response.setDealerName(order.getDealerName());
+        response.setFarmerName(order.getFarmerName());
+        response.setDeliveryAddress(order.getDeliveryAddress());
+        response.setFulfillmentType(order.getFulfillmentType());
+        response.setPaymentMethod(order.getPaymentMethod());
+        response.setTransactionId(order.getTransactionId());
+        response.setIsBidding(order.getIsBidding());
 
         if (order.getStatus() != null) {
             response.setStatus(

@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterModule } from '@angular/router';
+import { RouterModule, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { WalletService } from '../../core/services/wallet.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -729,13 +729,18 @@ export class WalletComponent implements OnInit, OnDestroy {
 
   constructor(
     private walletService: WalletService,
-    private authService: AuthService
+    private authService: AuthService,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
     this.sub.add(
       this.authService.currentUser$.subscribe((u: User | null) => {
         if (u) {
+          if (u.role === 'ADMIN') {
+            this.router.navigate(['/dashboard']);
+            return;
+          }
           this.currentUserId = u.id || u.userId || 'u-1';
           this.isDeliveryPartner = u.role === 'DELIVERY_PARTNER';
           if (this.isDeliveryPartner && !this.bankDetails.holderName) {

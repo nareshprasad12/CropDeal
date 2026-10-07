@@ -1480,14 +1480,14 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   get dealerAllOrders(): UIOrderItem[] {
-    const uid = String(this.user?.id || this.user?.userId || '');
+    const uid = String(this.user?.id || this.user?.userId || '').trim();
     const currentName = (this.user?.fullName || this.user?.username || '').trim().toLowerCase();
     return this.orders.filter(o => {
       const buyerName = (o.buyerName || '').trim().toLowerCase();
-      const dId = String(o.dealerId || '');
-      const isMyDealerId = Boolean(uid && dId && (dId === uid || dId === '2' || dId === 'dealer-1'));
-      const isMyDealerName = Boolean(currentName && buyerName && (buyerName.includes(currentName) || currentName.includes(buyerName)));
-      return Boolean(isMyDealerId || isMyDealerName || !o.dealerId || dId === 'dealer-1' || dId === '2');
+      const dId = String(o.dealerId || '').trim();
+      const isMyDealerId = Boolean(uid && dId && dId === uid);
+      const isMyDealerName = Boolean(currentName && buyerName && currentName === buyerName);
+      return Boolean(isMyDealerId || isMyDealerName);
     });
   }
 
@@ -1507,17 +1507,13 @@ export class OrderListComponent implements OnInit, OnDestroy {
     return this.orders.filter(o => {
       if (role === 'FARMER') {
         const farmerName = (o.farmerName || '').trim().toLowerCase();
-        const fId = String(o.farmerId || '');
-        const isMyFarmerId = Boolean(uid && fId && (fId === uid || fId === '1' || fId === 'farmer-1'));
-        const isMyFarmerName = Boolean(currentName && farmerName && (farmerName.includes(currentName) || currentName.includes(farmerName)));
-        return Boolean(isMyFarmerId || isMyFarmerName || !o.farmerId || fId === 'farmer-1' || fId === '1');
+        const fId = String(o.farmerId || '').trim();
+        return Boolean((uid && fId && fId === uid) || (currentName && farmerName && currentName === farmerName));
       } else if (role === 'DEALER') {
         const buyerName = (o.buyerName || '').trim().toLowerCase();
-        const dId = String(o.dealerId || '');
-        const isMyDealerId = Boolean(uid && dId && (dId === uid || dId === '2' || dId === 'dealer-1'));
-        const isMyDealerName = Boolean(currentName && buyerName && (buyerName.includes(currentName) || currentName.includes(buyerName)));
-        const isDealerOrder = Boolean(isMyDealerId || isMyDealerName || !o.dealerId || dId === 'dealer-1' || dId === '2');
-        if (!isDealerOrder) return false;
+        const dId = String(o.dealerId || '').trim();
+        const isMyDealer = Boolean((uid && dId && dId === uid) || (currentName && buyerName && currentName === buyerName));
+        if (!isMyDealer) return false;
 
         // Separate 2 sections for Dealer: Normal Orders vs Orders Completed by Bidding
         if (this.orderCategory === 'NORMAL' && o.isBidding) return false;

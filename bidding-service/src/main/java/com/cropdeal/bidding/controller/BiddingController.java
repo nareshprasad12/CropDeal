@@ -67,4 +67,23 @@ public class BiddingController {
         String url = biddingService.uploadPhoto(id, file);
         return ResponseEntity.ok(Map.of("photoUrl", url));
     }
+
+    @GetMapping("/all")
+    public ResponseEntity<List<BiddingListingResponse>> getAllListings() {
+        return ResponseEntity.ok(biddingService.getAllListings());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> deleteListing(@PathVariable Long id) {
+        biddingService.deleteListing(id);
+        return ResponseEntity.ok(Map.of("message", "Bidding listing deleted successfully", "id", id));
+    }
+
+    @PutMapping("/{id}/block")
+    public ResponseEntity<BiddingListingResponse> toggleBlockListing(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "true") boolean block
+    ) {
+        return ResponseEntity.ok(biddingService.toggleBlockListing(id, block));
+    }
 }

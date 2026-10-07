@@ -384,18 +384,18 @@ export interface UINegotiationItem {
             <div class="form-group mt-2">
               <div class="d-flex justify-between align-center mb-1">
                 <label class="form-label m-0">Your Counter Offer (&#8377; per Kg) *</label>
-                <span *ngIf="isDealer" class="text-xs text-muted">Must be below listed price (&lt; &#8377;{{ activeCounterItem.standardPrice }})</span>
+                <span class="text-xs text-muted">Must be strictly below starting price (&lt; &#8377;{{ activeCounterItem.standardPrice }})</span>
               </div>
               <input
                 type="number"
                 [(ngModel)]="counterPriceInput"
                 class="form-control"
-                [max]="isDealer ? activeCounterItem.standardPrice - 1 : 99999"
+                [max]="activeCounterItem.standardPrice - 1"
                 placeholder="e.g. 24"
                 min="1"
               />
-              <div *ngIf="isDealer && counterPriceInput && counterPriceInput >= activeCounterItem.standardPrice" class="alert alert-danger p-2 mt-2 text-xs">
-                <i class="fa-solid fa-triangle-exclamation"></i> Dealer counter proposal must be lower than original listed price (&#8377;{{ activeCounterItem.standardPrice }} / Kg).
+              <div *ngIf="counterPriceInput && counterPriceInput >= activeCounterItem.standardPrice" class="alert alert-danger p-2 mt-2 text-xs">
+                <i class="fa-solid fa-triangle-exclamation"></i> Counter proposal (&#8377;{{ counterPriceInput }} / Kg) must be strictly below the original starting price of &#8377;{{ activeCounterItem.standardPrice }} / Kg.
               </div>
             </div>
             <div class="form-group mt-2">
@@ -413,7 +413,7 @@ export interface UINegotiationItem {
             <button
               class="btn btn-primary"
               (click)="submitCounterOffer()"
-              [disabled]="!counterPriceInput || counterPriceInput <= 0 || (isDealer && counterPriceInput >= activeCounterItem.standardPrice)">
+              [disabled]="!counterPriceInput || counterPriceInput <= 0 || counterPriceInput >= activeCounterItem.standardPrice">
               Submit Counter Proposal
             </button>
           </div>
@@ -1974,24 +1974,42 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
     this.currentPage = 1;
   }
 
+  get userNegotiations(): UINegotiationItem[] {
+    const uid = String(this.user?.id || this.user?.userId || '').trim();
+    const uName = (this.user?.fullName || this.user?.username || '').toLowerCase().trim();
+
+    return this.items.filter(i => {
+      if (this.isFarmer) {
+        const fid = String(i.farmerId || '').trim();
+        const fname = (i.farmerName || '').toLowerCase().trim();
+        return Boolean((uid && fid && uid === fid) || (uName && fname && uName === fname));
+      } else if (this.isDealer) {
+        const did = String(i.dealerId || '').trim();
+        const dname = (i.dealerName || '').toLowerCase().trim();
+        return Boolean((uid && did && uid === did) || (uName && dname && uName === dname));
+      }
+      return true; // Admin views all
+    });
+  }
+
   get allCount(): number {
-    return this.items.length;
+    return this.userNegotiations.length;
   }
 
   get pendingCount(): number {
-    return this.items.filter(i => i.status === 'WAITING' || i.status === 'COUNTERED' || i.status === 'NEGOTIATING').length;
+    return this.userNegotiations.filter(i => i.status === 'WAITING' || i.status === 'COUNTERED' || i.status === 'NEGOTIATING').length;
   }
 
   get acceptedCount(): number {
-    return this.items.filter(i => i.status === 'ACCEPTED' || i.status === 'ORDER_PLACED').length;
+    return this.userNegotiations.filter(i => i.status === 'ACCEPTED' || i.status === 'ORDER_PLACED').length;
   }
 
   get rejectedCount(): number {
-    return this.items.filter(i => i.status === 'REJECTED').length;
+    return this.userNegotiations.filter(i => i.status === 'REJECTED').length;
   }
 
   get filteredItems(): UINegotiationItem[] {
-    return this.items.filter(i => {
+    return this.userNegotiations.filter(i => {
       // Tab filter
       if (this.selectedTab === 'PENDING') {
         if (i.status !== 'WAITING' && i.status !== 'COUNTERED' && i.status !== 'NEGOTIATING') return false;
@@ -2116,14 +2134,15 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
 
   openCounterModal(item: UINegotiationItem): void {
     this.activeCounterItem = item;
-    this.counterPriceInput = item.currentCounter || item.expectedCounter || item.standardPrice;
+    const initial = item.currentCounter || item.expectedCounter || (item.standardPrice - 1);
+    this.counterPriceInput = initial >= item.standardPrice ? Math.max(1, item.standardPrice - 1) : initial;
     this.counterNoteInput = '';
   }
 
   submitCounterOffer(): void {
     if (!this.activeCounterItem || !this.counterPriceInput) return;
-    if (this.isDealer && this.counterPriceInput >= this.activeCounterItem.standardPrice) {
-      alert(`Dealer counter proposal (₹${this.counterPriceInput}/Kg) must be lower than the original listed price of ₹${this.activeCounterItem.standardPrice}/Kg.`);
+    if (this.counterPriceInput >= this.activeCounterItem.standardPrice) {
+      alert(`Counter proposal (₹${this.counterPriceInput}/Kg) must be strictly below the original starting price of ₹${this.activeCounterItem.standardPrice}/Kg.`);
       return;
     }
     const actor = this.isDealer ? 'Dealer' : 'Farmer';

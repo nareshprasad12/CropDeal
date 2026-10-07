@@ -16,7 +16,7 @@ export interface ChatMessage {
   providedIn: 'root'
 })
 export class ChatbotService {
-  private baseUrl = `${environment.apiUrl}/v1/chatbot/ask`;
+  private baseUrl = `${environment.apiUrl}/chat/ask`;
 
   constructor(private http: HttpClient) {}
 

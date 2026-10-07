@@ -8,6 +8,7 @@ import { SubscriptionService } from '../../core/services/subscription.service';
 import { Crop } from '../../core/models/crop.model';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
+import { resolveCropImage } from '../../core/utils/crop-image.util';
 
 interface MandiPriceBenchmark {
   commodity: string;
@@ -565,9 +566,7 @@ export class CropAddComponent implements OnInit {
     this.crop.cropName = item.commodity;
     this.crop.cropType = item.category;
     this.matchedGovPrice = item;
-    if (item.imageUrl) {
-      this.crop.imageUrl = item.imageUrl;
-    }
+    this.crop.imageUrl = item.imageUrl || resolveCropImage(item.commodity);
     // Set a recommended fair price strictly less than government Mandi rate
     const suggestedRate = Math.max(1, Math.round((item.modalPricePerKg - 1) * 10) / 10);
     this.crop.pricePerUnit = suggestedRate;
@@ -602,10 +601,9 @@ export class CropAddComponent implements OnInit {
     if (match) {
       this.matchedGovPrice = match;
       this.crop.cropType = match.category;
-      if (match.imageUrl && !this.crop.imageUrl) {
-        this.crop.imageUrl = match.imageUrl;
-      }
+      this.crop.imageUrl = match.imageUrl || resolveCropImage(match.commodity);
     } else {
+      this.crop.imageUrl = resolveCropImage(query);
       // Default to general APMC rate of ₹25/Kg
       this.matchedGovPrice = {
         commodity: query,
@@ -671,35 +669,41 @@ export class CropAddComponent implements OnInit {
 
     const govRate = this.matchedGovPrice ? this.matchedGovPrice.modalPricePerKg : 25.0;
 
+    const user = this.authService.currentUserValue;
+    const fId = (user && (user.id || user.userId)) ? String(user.id || user.userId) : (this.crop.farmerId || '1');
+    const fName = (user && (user.fullName || user.username)) ? (user.fullName || user.username) : (this.crop.farmerName || 'Farmer Producer');
+
     const cropToSave: Crop = {
       id: 'crop-' + Date.now(),
       cropName: this.crop.cropName || 'Harvest',
       cropType: this.crop.cropType || 'Grains',
-      quantity: this.crop.quantity || 100,
-      unit: 'Kg',
+      quantity: Number(this.crop.quantity) || 100,
+      unit: this.crop.unit || 'Kg',
       pricePerUnit: Number(this.crop.pricePerUnit),
-      location: this.crop.location || 'Punjab Mandi',
-      farmerId: this.crop.farmerId || 'farmer-1',
-      farmerName: this.crop.farmerName || 'Farmer Producer',
+      location: this.crop.location || (user?.address || 'Punjab Mandi'),
+      farmerId: fId,
+      farmerName: fName,
       description: this.crop.description,
-      imageUrl: this.crop.imageUrl || 'https://images.unsplash.com/photo-1574943320219-553eb213f72d?w=500',
+      imageUrl: this.crop.imageUrl || resolveCropImage(this.crop.cropName),
       govMspPrice: govRate,
       status: 'AVAILABLE',
       createdAt: new Date().toISOString()
     };
 
     this.cropService.addCrop(cropToSave).subscribe({
-      next: () => {
-        this.subscriptionService.notifySubscribersOnNewCrop(cropToSave);
+      next: (savedCrop) => {
+        this.subscriptionService.notifySubscribersOnNewCrop(savedCrop || cropToSave);
+        this.cropService.getAllCrops().subscribe();
         this.submitting = false;
         this.successMessage = `Crop "${cropToSave.cropName}" published successfully at ₹${cropToSave.pricePerUnit}/Kg (Below Government Mandhi rate of ₹${govRate}/Kg)! Subscribed dealers have been notified.`;
-        setTimeout(() => this.router.navigate(['/crops']), 1800);
+        setTimeout(() => this.router.navigate(['/crops']), 1500);
       },
       error: () => {
         this.subscriptionService.notifySubscribersOnNewCrop(cropToSave);
+        this.cropService.getAllCrops().subscribe();
         this.submitting = false;
         this.successMessage = `Crop "${cropToSave.cropName}" published successfully at ₹${cropToSave.pricePerUnit}/Kg (Below Government Mandhi rate of ₹${govRate}/Kg)! Subscribed dealers have been notified.`;
-        setTimeout(() => this.router.navigate(['/crops']), 1800);
+        setTimeout(() => this.router.navigate(['/crops']), 1500);
       }
     });
   }

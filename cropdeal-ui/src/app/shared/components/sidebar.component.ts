@@ -336,8 +336,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
     { label: 'Orders', icon: 'fa-solid fa-calendar-check', route: '/orders', roles: ['FARMER', 'DEALER'] },
     // Negotiations: strictly Farmer and Dealer only (Excluded for Admin and Delivery Partner)
     { label: 'Negotiations', icon: 'fa-solid fa-comments', route: '/negotiations', roles: ['FARMER', 'DEALER'] },
-    // Wallet: Farmer, Dealer, Delivery Partner, Admin
-    { label: 'Wallet', icon: 'fa-solid fa-wallet', route: '/wallet', roles: ['FARMER', 'DEALER', 'DELIVERY_PARTNER', 'ADMIN'] },
+    // Wallet: Farmer, Dealer, Delivery Partner only (Removed from Admin)
+    { label: 'Wallet', icon: 'fa-solid fa-wallet', route: '/wallet', roles: ['FARMER', 'DEALER', 'DELIVERY_PARTNER'] },
     // Deliveries: Delivery Partner ONLY (Dealer checks order status, Admin does not need delivery section)
     { label: 'Deliveries', icon: 'fa-solid fa-truck-fast', route: '/deliveries', roles: ['DELIVERY_PARTNER'] },
     // Universal Reports: Farmer, Dealer, Delivery Partner, Admin

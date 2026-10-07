@@ -63,6 +63,8 @@ public class SecurityConfig {
                                 "/api/auth/facebook",
                                 "/api/auth/forgot-password",
                                 "/api/auth/reset-password",
+                                "/api/auth/verify-otp",
+                                "/api/auth/change-password",
                                 "/oauth2/**",
                                 "/login/oauth2/**"
                         ).permitAll()

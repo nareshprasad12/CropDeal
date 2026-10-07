@@ -891,16 +891,36 @@ export class ProfileComponent implements OnInit {
   }
 
   savePassword(): void {
-    if (!this.newPassword || this.newPassword !== this.confirmPassword) {
-      this.errorMessage = 'Passwords do not match or are invalid.';
+    if (!this.currentPassword) {
+      this.errorMessage = 'Please enter your current password.';
       setTimeout(() => this.errorMessage = '', 4000);
       return;
     }
-    this.successMessage = 'Password updated successfully!';
-    this.currentPassword = '';
-    this.newPassword = '';
-    this.confirmPassword = '';
-    setTimeout(() => this.successMessage = '', 4000);
+    if (!this.newPassword || this.newPassword.length < 6) {
+      this.errorMessage = 'New password must be at least 6 characters.';
+      setTimeout(() => this.errorMessage = '', 4000);
+      return;
+    }
+    if (this.newPassword !== this.confirmPassword) {
+      this.errorMessage = 'New password and confirmation password do not match.';
+      setTimeout(() => this.errorMessage = '', 4000);
+      return;
+    }
+
+    this.authService.changePassword(this.currentPassword, this.newPassword).subscribe({
+      next: (res: any) => {
+        this.successMessage = res?.message || 'Password updated successfully in database!';
+        this.errorMessage = '';
+        this.currentPassword = '';
+        this.newPassword = '';
+        this.confirmPassword = '';
+        setTimeout(() => this.successMessage = '', 5000);
+      },
+      error: (err: any) => {
+        this.errorMessage = err?.error?.message || err?.message || 'Failed to update password. Please check your current password.';
+        setTimeout(() => this.errorMessage = '', 5000);
+      }
+    });
   }
 
   onPhotoSelected(event: any): void {

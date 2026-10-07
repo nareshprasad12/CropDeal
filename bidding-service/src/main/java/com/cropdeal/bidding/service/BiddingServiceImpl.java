@@ -232,6 +232,27 @@ public class BiddingServiceImpl implements BiddingService {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<BiddingListingResponse> getAllListings() {
+        return listingRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    public void deleteListing(Long listingId) {
+        bidRepository.deleteAll(bidRepository.findByListingIdOrderByBidAmountDesc(listingId));
+        listingRepository.deleteById(listingId);
+    }
+
+    @Override
+    public BiddingListingResponse toggleBlockListing(Long listingId, boolean block) {
+        BiddingListing listing = findListing(listingId);
+        listing.setStatus(block ? BiddingStatus.BLOCKED : BiddingStatus.OPEN);
+        return toResponse(listingRepository.save(listing));
+    }
+
     private BiddingListing findListing(Long id) {
         return listingRepository.findById(id).orElseThrow(() -> new BiddingNotFoundException(id));
     }

@@ -1979,7 +1979,15 @@ export class LandingComponent implements OnInit {
     });
 
     this.cropService.crops$.subscribe((cropsList: Crop[]) => {
-      this.crops = (cropsList || []).map((c: Crop) => this.mapCropToCard(c));
+      const deletedIds = this.cropService.getDeletedCropIds();
+      this.crops = (cropsList || [])
+        .filter((c: Crop) => {
+          const cId = String(c.id || c.cropId || '');
+          if (deletedIds.has(cId)) return false;
+          if (c.status === 'BLOCKED') return false;
+          return true;
+        })
+        .map((c: Crop) => this.mapCropToCard(c));
     });
 
     this.cropService.getAllCrops().subscribe({
@@ -1989,14 +1997,16 @@ export class LandingComponent implements OnInit {
   }
 
   private mapCropToCard(crop: Crop): CropCard {
+    const cropName = crop.cropName || (crop as any).commodity || 'Fresh Harvest';
     const qty = Number(crop.quantity !== undefined ? crop.quantity : (crop.availableQuantity || 0));
+    const price = Number(crop.pricePerUnit !== undefined ? crop.pricePerUnit : ((crop as any).pricePerKg || 0));
     return {
       id: crop.id || crop.cropId || ('cr-' + Date.now()),
-      name: crop.cropName,
+      name: cropName,
       category: crop.cropType || 'Produce',
       grade: (crop.variety && crop.variety.toLowerCase().includes('b')) ? 'Grade B' : 'Grade A',
-      image: crop.imageUrl || this.getDefaultImageForCrop(crop.cropName),
-      pricePerKg: Number(crop.pricePerUnit) || 0,
+      image: crop.imageUrl || this.getDefaultImageForCrop(cropName),
+      pricePerKg: price,
       govMspPrice: crop.govMspPrice,
       state: crop.location || 'Local Yard, India',
       availableQuantity: qty,

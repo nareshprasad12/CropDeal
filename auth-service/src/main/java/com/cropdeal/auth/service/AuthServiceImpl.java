@@ -65,16 +65,26 @@ public class AuthServiceImpl implements AuthService {
                 .trim()
                 .toLowerCase();
 
-        if (userRepository.existsByEmail(email)) {
+        String username = (request.getUsername() != null && !request.getUsername().trim().isEmpty())
+                ? request.getUsername().trim().toLowerCase()
+                : email.split("@")[0];
 
+        if (userRepository.existsByEmail(email)) {
             throw new UserAlreadyExistsException(
-                    "Email is already registered"
+                    "Already registered, please login"
+            );
+        }
+
+        if (userRepository.existsByUsername(username)) {
+            throw new UserAlreadyExistsException(
+                    "Already registered, please login"
             );
         }
 
         User user = new User();
 
         user.setEmail(email);
+        user.setUsername(username);
 
         user.setPassword(
                 passwordEncoder.encode(
@@ -95,12 +105,21 @@ public class AuthServiceImpl implements AuthService {
          */
         try {
 
+            String displayName = request.getName() != null && !request.getName().trim().isEmpty()
+                    ? request.getName().trim()
+                    : (request.getFullName() != null && !request.getFullName().trim().isEmpty()
+                            ? request.getFullName().trim()
+                            : username);
+            String phoneNum = request.getPhone() != null && !request.getPhone().trim().isEmpty()
+                    ? request.getPhone().trim()
+                    : (request.getPhoneNumber() != null ? request.getPhoneNumber().trim() : "9876543210");
+
         	CreateProfileRequest profileRequest =
         	        new CreateProfileRequest(
         	                savedUser.getId(),
-        	                request.getName(),
+        	                displayName,
         	                email,
-        	                request.getPhone(),
+        	                phoneNum,
         	                request.getRole()
         	        );
 
@@ -115,7 +134,7 @@ public class AuthServiceImpl implements AuthService {
             userRepository.delete(savedUser);
 
             throw new RuntimeException(
-                    "Unable to create user profile"
+                    "Unable to create user profile: " + e.getMessage()
             );
         }
 
@@ -127,16 +146,26 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public LoginResponse login(LoginRequest request) {
 
-        String email = request.getEmail()
-                .trim()
-                .toLowerCase();
+        String identifier = null;
+        if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            identifier = request.getEmail().trim().toLowerCase();
+        } else if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
+            identifier = request.getUsername().trim().toLowerCase();
+        }
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(
-                        () -> new InvalidCredentialsException(
-                                "Invalid email or password"
-                        )
-                );
+        if (identifier == null || identifier.isEmpty()) {
+            throw new InvalidCredentialsException("Email or username is required");
+        }
+
+        final String lookupKey = identifier;
+        User user = userRepository.findByEmail(lookupKey)
+                .or(() -> userRepository.findByUsername(lookupKey))
+                .orElseGet(() -> userRepository.findAll().stream()
+                        .filter(u -> (u.getUsername() != null && u.getUsername().equalsIgnoreCase(lookupKey))
+                                || u.getEmail().toLowerCase().startsWith(lookupKey + "@")
+                                || u.getEmail().equalsIgnoreCase(lookupKey))
+                        .findFirst()
+                        .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password")));
 
         if (!passwordEncoder.matches(
                 request.getPassword(),
@@ -149,10 +178,8 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (user.getStatus() != UserStatus.ACTIVE) {
-
             throw new InvalidCredentialsException(
-                    "Account is " +
-                            user.getStatus().name().toLowerCase()
+                    "User account is blocked by administrator"
             );
         }
 
@@ -163,6 +190,7 @@ public class AuthServiceImpl implements AuthService {
         return new LoginResponse(
                 user.getId(),
                 user.getEmail(),
+                user.getUsername() != null ? user.getUsername() : user.getEmail().split("@")[0],
                 "ROLE_" + user.getRole().name(),
                 token
         );
@@ -299,12 +327,15 @@ public class AuthServiceImpl implements AuthService {
                 .trim()
                 .toLowerCase();
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(
-                        () -> new UserNotFoundException(
-                                "User not found"
-                        )
-                );
+        final String lookupEmail = email;
+        User user = userRepository.findByEmail(lookupEmail)
+                .or(() -> userRepository.findByUsername(lookupEmail))
+                .orElseGet(() -> userRepository.findAll().stream()
+                        .filter(u -> (u.getUsername() != null && u.getUsername().equalsIgnoreCase(lookupEmail))
+                                || u.getEmail().toLowerCase().startsWith(lookupEmail + "@")
+                                || u.getEmail().equalsIgnoreCase(lookupEmail))
+                        .findFirst()
+                        .orElseThrow(() -> new UserNotFoundException("User not found with email or username: " + lookupEmail)));
 
         String resetToken = String.format("%06d", new java.util.Random().nextInt(900000) + 100000);
 
@@ -336,8 +367,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         return new MessageResponse(
-                "Password reset token generated: "
-                        + resetToken
+                "Password reset OTP sent to " + user.getEmail() + ": " + resetToken
         );
     }
 
@@ -393,6 +423,30 @@ public class AuthServiceImpl implements AuthService {
         }
 
         return new MessageResponse("OTP verified successfully");
+    }
+
+    @Override
+    public MessageResponse changePassword(ChangePasswordRequest request) {
+        if (request == null || request.getEmail() == null || request.getEmail().isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
+        String email = request.getEmail().trim().toLowerCase();
+        User user = userRepository.findByEmail(email)
+                .or(() -> userRepository.findByUsername(email))
+                .orElseThrow(() -> new UserNotFoundException("User not found with email: " + email));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new InvalidCredentialsException("Current password is incorrect");
+        }
+
+        if (request.getNewPassword() == null || request.getNewPassword().trim().length() < 6) {
+            throw new IllegalArgumentException("New password must be at least 6 characters");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword().trim()));
+        userRepository.save(user);
+
+        return new MessageResponse("Password updated successfully");
     }
 
     @Override

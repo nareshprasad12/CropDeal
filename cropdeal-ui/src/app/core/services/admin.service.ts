@@ -36,12 +36,26 @@ export class AdminService {
   }
 
   blockUser(userId: string, reason: string = 'Blocked by Administrator'): Observable<any> {
+    const numId = Number(userId);
+    if (!isNaN(numId) && numId > 0) {
+      this.http.put(`${environment.apiUrl}/auth/users/${numId}/status`, { status: 'SUSPENDED' }).subscribe({
+        next: () => {},
+        error: () => {}
+      });
+    }
     return this.http.post<any>(`${this.adminUrl}/users/${userId}/block?reason=${encodeURIComponent(reason)}`, {}).pipe(
       catchError(() => of({ success: true, message: 'User blocked' }))
     );
   }
 
   unblockUser(userId: string): Observable<any> {
+    const numId = Number(userId);
+    if (!isNaN(numId) && numId > 0) {
+      this.http.put(`${environment.apiUrl}/auth/users/${numId}/status`, { status: 'ACTIVE' }).subscribe({
+        next: () => {},
+        error: () => {}
+      });
+    }
     return this.http.post<any>(`${this.adminUrl}/users/${userId}/unblock`, {}).pipe(
       catchError(() => of({ success: true, message: 'User unblocked' }))
     );

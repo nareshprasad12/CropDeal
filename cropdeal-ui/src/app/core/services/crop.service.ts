@@ -4,6 +4,7 @@ import { Observable, of, BehaviorSubject } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { Crop, CropAlert, GovernmentPrice } from '../models/crop.model';
 import { environment } from '../../../environments/environment';
+import { resolveCropImage } from '../utils/crop-image.util';
 
 @Injectable({
   providedIn: 'root'
@@ -25,6 +26,40 @@ export class CropService {
     }
   }
 
+  public mapBackendCrop(c: any): Crop {
+    if (!c) return {} as Crop;
+    const cropName = c.cropName || c.commodity || 'Fresh Harvest';
+    const rawQty = c.quantity !== undefined ? c.quantity : (c.availableQuantity !== undefined ? c.availableQuantity : 100);
+    const qty = typeof rawQty === 'number' ? rawQty : Number(rawQty) || 100;
+    const price = Number(c.pricePerUnit !== undefined ? c.pricePerUnit : (c.pricePerKg !== undefined ? c.pricePerKg : 20));
+    const location = c.location || (c.district && c.state ? `${c.district}, ${c.state}` : (c.district || c.state || 'Local Mandi'));
+    const farmerId = c.farmerId !== undefined && c.farmerId !== null ? String(c.farmerId) : '1';
+    const farmerName = c.farmerName || 'Farmer Producer';
+    const id = c.id !== undefined && c.id !== null ? String(c.id) : (c.cropId ? String(c.cropId) : `cr-${Date.now()}`);
+
+    return {
+      id,
+      cropId: id,
+      cropName,
+      cropType: c.cropType || 'Grains',
+      variety: c.variety || 'Standard Grade A',
+      quantity: qty,
+      availableQuantity: qty,
+      unit: c.unit || 'Kg',
+      pricePerUnit: price,
+      location,
+      farmerId,
+      farmerName,
+      farmerPhone: c.farmerPhone,
+      harvestDate: c.harvestDate,
+      imageUrl: c.imageUrl || resolveCropImage(cropName),
+      status: c.status || 'AVAILABLE',
+      description: c.description || '',
+      govMspPrice: c.govMspPrice || 25,
+      createdAt: c.createdAt || new Date().toISOString()
+    };
+  }
+
   refreshCrops(): Crop[] {
     const fresh = this.getLocalCrops();
     this.cropsSubject.next(fresh);
@@ -43,13 +78,37 @@ export class CropService {
     });
   }
 
+  private readonly DELETED_CROPS_KEY = 'cropdeal_deleted_crop_ids';
+
+  public getDeletedCropIds(): Set<string> {
+    try {
+      const raw = localStorage.getItem(this.DELETED_CROPS_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return new Set(arr.map(String));
+      }
+    } catch {}
+    return new Set<string>();
+  }
+
+  public markCropAsDeleted(id: string): void {
+    try {
+      const deleted = this.getDeletedCropIds();
+      deleted.add(String(id));
+      localStorage.setItem(this.DELETED_CROPS_KEY, JSON.stringify(Array.from(deleted)));
+    } catch {}
+  }
+
   public getLocalCrops(): Crop[] {
     try {
+      const deleted = this.getDeletedCropIds();
       const raw = localStorage.getItem(this.CROPS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           return parsed.filter(c => {
+            const cId = String(c.id || c.cropId || '');
+            if (deleted.has(cId)) return false;
             const q = c.quantity !== undefined ? c.quantity : c.availableQuantity;
             return q === undefined || q > 0;
           });
@@ -61,7 +120,10 @@ export class CropService {
 
   private saveLocalCrops(crops: Crop[]): void {
     try {
+      const deleted = this.getDeletedCropIds();
       const activeOnly = (crops || []).filter(c => {
+        const cId = String(c.id || c.cropId || '');
+        if (deleted.has(cId)) return false;
         const q = c.quantity !== undefined ? c.quantity : c.availableQuantity;
         return q === undefined || q > 0;
       });
@@ -71,27 +133,53 @@ export class CropService {
   }
 
   getAllCrops(): Observable<Crop[]> {
-    return this.http.get<Crop[]>(this.baseUrl).pipe(
-      tap(crops => {
-        if (crops && Array.isArray(crops)) this.saveLocalCrops(crops);
+    const deleted = this.getDeletedCropIds();
+    return this.http.get<any[]>(this.baseUrl).pipe(
+      map(items => {
+        if (Array.isArray(items)) {
+          const mapped = items
+            .map(c => this.mapBackendCrop(c))
+            .filter(c => !deleted.has(String(c.id)) && !deleted.has(String(c.cropId)));
+          this.saveLocalCrops(mapped);
+          return mapped;
+        }
+        return this.getLocalCrops();
       }),
       catchError(() => of(this.getLocalCrops()))
     );
   }
 
   getCropById(id: string): Observable<Crop> {
-    return this.http.get<Crop>(`${this.baseUrl}/${id}`).pipe(
+    const deleted = this.getDeletedCropIds();
+    if (deleted.has(String(id))) {
+      return of({} as Crop);
+    }
+    return this.http.get<any>(`${this.baseUrl}/${id}`).pipe(
+      map(res => {
+        const mapped = this.mapBackendCrop(res);
+        if (deleted.has(String(mapped.id)) || deleted.has(String(mapped.cropId))) {
+          return {} as Crop;
+        }
+        return mapped;
+      }),
       catchError(() => {
-        const found = this.getLocalCrops().find(c => c.id === id || c.cropId === id || c.cropName.toLowerCase() === id.toLowerCase());
+        const found = this.getLocalCrops().find(c => c.id === id || c.cropId === id || c.cropName?.toLowerCase() === id?.toLowerCase());
         return of(found || ({} as Crop));
       })
     );
   }
 
   getCropsByFarmer(farmerId: string): Observable<Crop[]> {
-    return this.http.get<Crop[]>(`${this.baseUrl}/farmer/${farmerId}`).pipe(
+    const fId = String(farmerId).trim();
+    return this.http.get<any[]>(`${this.baseUrl}/farmer/${fId}`).pipe(
+      map(items => {
+        if (Array.isArray(items)) {
+          return items.map(c => this.mapBackendCrop(c));
+        }
+        return this.getLocalCrops().filter(c => String(c.farmerId) === fId);
+      }),
       catchError(() => {
-        const list = this.getLocalCrops().filter(c => c.farmerId === farmerId);
+        const list = this.getLocalCrops().filter(c => String(c.farmerId) === fId);
         return of(list);
       })
     );
@@ -99,24 +187,41 @@ export class CropService {
 
   addCrop(crop: Partial<Crop>): Observable<Crop> {
     const qty = crop.quantity || crop.availableQuantity || 100;
-    const newCrop: Crop = {
-      ...crop,
-      id: crop.id || ('cr-' + Date.now()),
-      cropName: crop.cropName || 'Fresh Harvest',
-      cropType: crop.cropType || 'Cereals',
-      quantity: qty,
-      availableQuantity: qty,
-      unit: crop.unit || 'Kg',
-      pricePerUnit: crop.pricePerUnit || 20,
-      location: crop.location || 'Local Mandi Yard',
-      status: 'AVAILABLE',
-      createdAt: new Date().toISOString()
-    };
-    const current = [newCrop, ...this.getLocalCrops().filter(c => c.id !== newCrop.id)];
-    this.saveLocalCrops(current);
+    const price = crop.pricePerUnit || 20;
+    const name = crop.cropName || 'Fresh Harvest';
+    const loc = crop.location || 'Local Mandi';
+    const fId = crop.farmerId || '1';
+    const fName = crop.farmerName || 'Farmer Producer';
 
-    return this.http.post<Crop>(this.baseUrl, crop).pipe(
-      catchError(() => of(newCrop))
+    const payload: any = {
+      ...crop,
+      farmerId: fId,
+      commodity: name,
+      cropName: name,
+      grade: 'A',
+      quantity: qty,
+      unit: crop.unit || 'KG',
+      pricePerKg: price,
+      pricePerUnit: price,
+      location: loc,
+      farmerName: fName,
+      imageUrl: crop.imageUrl || resolveCropImage(name),
+      description: crop.description || ''
+    };
+
+    return this.http.post<any>(this.baseUrl, payload).pipe(
+      map(res => {
+        const mapped = this.mapBackendCrop(res || payload);
+        const current = [mapped, ...this.getLocalCrops().filter(c => c.id !== mapped.id)];
+        this.saveLocalCrops(current);
+        return mapped;
+      }),
+      catchError(() => {
+        const fallback = this.mapBackendCrop(payload);
+        const current = [fallback, ...this.getLocalCrops().filter(c => c.id !== fallback.id)];
+        this.saveLocalCrops(current);
+        return of(fallback);
+      })
     );
   }
 
@@ -144,15 +249,25 @@ export class CropService {
   }
 
   deleteCrop(id: string): Observable<void> {
+    this.markCropAsDeleted(id);
     const list = this.getLocalCrops();
     const target = String(id).trim().toLowerCase();
     const filtered = list.filter(c => {
       const cId = c.id !== undefined && c.id !== null ? String(c.id).trim().toLowerCase() : '';
       const cropId = c.cropId !== undefined && c.cropId !== null ? String(c.cropId).trim().toLowerCase() : '';
       const cName = c.cropName ? c.cropName.trim().toLowerCase() : '';
-      return cId !== target && cropId !== target && cName !== target;
+      const isMatch = cId === target || cropId === target || (target && cName === target);
+      if (isMatch) {
+        if (c.id) this.markCropAsDeleted(String(c.id));
+        if (c.cropId) this.markCropAsDeleted(String(c.cropId));
+      }
+      return !isMatch;
     });
     this.saveLocalCrops(filtered);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cropdeal:crop_deleted', { detail: { id } }));
+    }
 
     return this.http.delete<void>(`${this.baseUrl}/${id}`).pipe(
       catchError(() => of(undefined as any))

@@ -425,10 +425,31 @@ export class LoginComponent {
       return;
     }
 
+    const input = this.username.trim();
+    // Check if user is blocked in master storage
+    try {
+      const raw = localStorage.getItem('cropdeal_users_master');
+      if (raw) {
+        const list = JSON.parse(raw);
+        const match = list.find((u: any) =>
+          (u.email && u.email.toLowerCase() === input.toLowerCase()) ||
+          (u.username && u.username.toLowerCase() === input.toLowerCase())
+        );
+        if (match && (match.status === 'BLOCKED' || match.isBlocked) && match.role !== 'ADMIN' && match.username?.toLowerCase() !== 'admin') {
+          this.errorMessage = '🚫 Access Denied: User account is blocked by administrator. Please contact support.';
+          return;
+        }
+      }
+    } catch {}
+
+    const isEmail = input.includes('@');
     this.loading = true;
     this.errorMessage = '';
-
-    this.authService.login({ username: this.username, password: this.password }).subscribe({
+    this.authService.login({
+      username: input,
+      email: isEmail ? input : undefined,
+      password: this.password
+    }).subscribe({
       next: (res) => {
         this.loading = false;
         // User rule: "crop alert need to be only use our db and need to query only when login not ervrytime continuously"
@@ -449,30 +470,60 @@ export class LoginComponent {
                 });
               }
             },
-            error: () => {
-              // Graceful fallback if backend mock or price alert service DB is cold
-            }
+            error: () => {}
           });
         }
         this.router.navigate(['/']);
       },
       error: (err) => {
         this.loading = false;
-        // In local development or testing mode, if backend auth is offline or returning error, allow demo fallback
-        this.errorMessage = err.error?.message || 'Login failed. Please check credentials or use demo accounts.';
+        const msg = err.error?.message || err.error?.error || '';
+        if (msg.toLowerCase().includes('block') || msg.toLowerCase().includes('suspend')) {
+          this.errorMessage = '🚫 Access Denied: User account is blocked by administrator. Please contact support.';
+        } else {
+          this.errorMessage = msg || 'Login failed. Please check credentials or use demo accounts.';
+        }
       }
     });
   }
 
   fillDemo(u: string, p: string, role: string): void {
-    this.username = u;
-    this.password = p;
-    this.authService.loginWithDemo(u, role as any);
-    this.cropService.checkLoginPriceAlerts(role.toLowerCase() + '-1').subscribe({
-      next: () => {},
-      error: () => {}
-    });
-    this.router.navigate(['/']);
+    this.errorMessage = '';
+    // Check if demo user is specifically blocked by username or email
+    try {
+      const raw = localStorage.getItem('cropdeal_users_master');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          const match = list.find((item: any) =>
+            (item.username && item.username.toLowerCase() === u.toLowerCase()) ||
+            (item.email && item.email.toLowerCase() === (u.toLowerCase() + '@cropdeal.in'))
+          );
+          if (role !== 'ADMIN' && u.toLowerCase() !== 'admin' && match && (match.status === 'BLOCKED' || match.isBlocked)) {
+            this.errorMessage = `🚫 Access Denied: ${role} account is blocked by administrator. Please contact support.`;
+            return;
+          }
+        }
+      }
+    } catch {}
+
+    try {
+      this.username = u;
+      this.password = p;
+      this.authService.loginWithDemo(u, role as any);
+      this.cropService.checkLoginPriceAlerts(role.toLowerCase() + '-1').subscribe({
+        next: () => {},
+        error: () => {}
+      });
+      this.router.navigate(['/']);
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (msg.toLowerCase().includes('block')) {
+        this.errorMessage = '🚫 Access Denied: User account is blocked by administrator. Please contact support.';
+      } else {
+        this.errorMessage = msg || 'Login failed. Please check credentials.';
+      }
+    }
   }
 
   async loginWithFacebook(): Promise<void> {
