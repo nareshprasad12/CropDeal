@@ -54,6 +54,11 @@ testem.log
 # ------------------------------------------------------------------------------
 *.log
 **/*.log
+*.err
+**/*.err
+*.out
+**/*.out
+test-eureka.*
 logs/
 **/logs/
 auth.log
@@ -68,6 +73,8 @@ auth_err.log
 # ------------------------------------------------------------------------------
 uploads/*
 !uploads/.gitkeep
+**/uploads/*
+!**/uploads/.gitkeep
 uploads/crops/*
 !uploads/crops/.gitkeep
 uploads/bidding/*

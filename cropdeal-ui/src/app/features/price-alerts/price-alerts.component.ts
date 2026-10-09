@@ -6,6 +6,7 @@ import { catchError } from 'rxjs/operators';
 import { CropService } from '../../core/services/crop.service';
 import { AuthService } from '../../core/services/auth.service';
 import { User } from '../../core/models/user.model';
+import { INDIAN_STATES, getDistrictsForState, matchesPlace } from '../../core/utils/india-locations.util';
 
 export interface MandiRow {
   index: number;
@@ -88,7 +89,7 @@ export interface MandiRow {
         <div class="filter-grid">
           <div class="filter-item">
             <label><i class="fa-solid fa-location-dot text-emerald"></i> State</label>
-            <select [(ngModel)]="selectedState" (change)="onFilterChange()" class="filter-select">
+            <select [(ngModel)]="selectedState" (change)="onStateChange()" class="filter-select">
               <option value="All States">All States</option>
               <option *ngFor="let st of availableStates" [value]="st">{{ st }}</option>
             </select>
@@ -128,6 +129,9 @@ export interface MandiRow {
           <div class="btn-group-right">
             <button class="btn-search-mandi" (click)="onFilterChange()">
               <i class="fa-solid fa-magnifying-glass"></i> Filter Records
+            </button>
+            <button class="btn-sync-data" (click)="resetFilters()" title="Reset all filters">
+              <i class="fa-solid fa-rotate-left"></i> Reset
             </button>
             <button class="btn-sync-data" (click)="refreshMandiPricesFromApi()" [disabled]="isSyncing">
               <i class="fa-solid fa-arrows-rotate" [class.fa-spin]="isSyncing"></i>
@@ -564,7 +568,7 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.subs.push(
-      this.authService.currentUser$.subscribe(u => {
+      this.authService.currentUser$.subscribe((u: User | null) => {
         this.user = u;
       })
     );
@@ -719,21 +723,47 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
     });
   }
 
+  onStateChange(): void {
+    if (this.selectedState === 'All States' || !this.selectedState) {
+      const districts = new Set<string>();
+      this.allRows.forEach(r => { if (r.district) districts.add(r.district); });
+      this.availableDistricts = Array.from(districts).sort();
+      this.selectedDistrict = 'All Districts';
+    } else {
+      this.availableDistricts = getDistrictsForState(this.selectedState);
+      this.selectedDistrict = 'All Districts';
+    }
+    this.onFilterChange();
+  }
+
+  resetFilters(): void {
+    this.selectedState = 'All States';
+    this.selectedDistrict = 'All Districts';
+    this.selectedCommodity = 'All Commodities';
+    this.selectedMarket = 'All Markets';
+    this.onStateChange();
+  }
+
   private updateDropdowns(): void {
-    const states = new Set<string>();
-    const districts = new Set<string>();
     const commodities = new Set<string>();
     const markets = new Set<string>();
 
     this.allRows.forEach(r => {
-      if (r.state) states.add(r.state);
-      if (r.district) districts.add(r.district);
       if (r.commodity) commodities.add(r.commodity);
       if (r.market) markets.add(r.market);
     });
 
-    this.availableStates = Array.from(states).sort();
-    this.availableDistricts = Array.from(districts).sort();
+    // Populate all states of India
+    this.availableStates = [...INDIAN_STATES];
+
+    if (this.selectedState && this.selectedState !== 'All States') {
+      this.availableDistricts = getDistrictsForState(this.selectedState);
+    } else {
+      const districts = new Set<string>();
+      this.allRows.forEach(r => { if (r.district) districts.add(r.district); });
+      this.availableDistricts = Array.from(districts).sort();
+    }
+
     this.availableCommodities = Array.from(commodities).sort();
     this.availableMarkets = Array.from(markets).sort();
   }
@@ -743,16 +773,21 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
   }
 
   get totalUniqueStates(): number {
-    return this.availableStates.length || 10;
+    return INDIAN_STATES.length;
   }
 
   get filteredRows(): MandiRow[] {
     return this.allRows.filter(r => {
-      const stateMatch = this.selectedState === 'All States' || r.state.toLowerCase() === this.selectedState.toLowerCase();
-      const distMatch = this.selectedDistrict === 'All Districts' || r.district.toLowerCase() === this.selectedDistrict.toLowerCase();
+      const placeMatch = matchesPlace(
+        `${r.market} ${r.district} ${r.state}`,
+        r.state,
+        r.district,
+        this.selectedState,
+        this.selectedDistrict
+      );
       const commMatch = this.selectedCommodity === 'All Commodities' || r.commodity.toLowerCase() === this.selectedCommodity.toLowerCase();
       const mktMatch = this.selectedMarket === 'All Markets' || r.market.toLowerCase() === this.selectedMarket.toLowerCase();
-      return stateMatch && distMatch && commMatch && mktMatch;
+      return placeMatch && commMatch && mktMatch;
     });
   }
 

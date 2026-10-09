@@ -24,8 +24,8 @@ import { User } from '../../core/models/user.model';
         </div>
 
         <div class="profile-header-info">
-          <h2 class="profile-user-name">{{ profile.name || 'Ramesh Kumar' }}</h2>
-          <span class="profile-user-role">{{ getRoleTitle(profile.role) }}</span>
+          <h2 class="profile-user-name">{{ profile.name != null ? profile.name : 'null' }}</h2>
+          <span class="profile-user-role">{{ getRoleTitle(profile.role || '') }}</span>
           <div class="verified-pill shadow-xs">
             <i class="fa-solid fa-shield-check text-emerald"></i>
             <strong>Verified {{ profile.role === 'FARMER' ? 'Farmer' : (profile.role === 'DEALER' ? 'Dealer' : 'Partner') }}</strong>
@@ -372,6 +372,7 @@ import { User } from '../../core/models/user.model';
                       name="currPwd"
                       class="form-control"
                       placeholder="Enter current password"
+                      autocomplete="current-password"
                       required
                     />
                     <button type="button" class="btn-toggle-eye" (click)="showCurrentPwd = !showCurrentPwd">
@@ -388,7 +389,8 @@ import { User } from '../../core/models/user.model';
                       [(ngModel)]="newPassword"
                       name="newPwd"
                       class="form-control"
-                      placeholder="Enter new password"
+                      placeholder="Enter new password (min. 6 characters)"
+                      autocomplete="new-password"
                       required
                     />
                     <button type="button" class="btn-toggle-eye" (click)="showNewPwd = !showNewPwd">
@@ -406,6 +408,7 @@ import { User } from '../../core/models/user.model';
                       name="confPwd"
                       class="form-control"
                       placeholder="Confirm new password"
+                      autocomplete="new-password"
                       required
                     />
                     <button type="button" class="btn-toggle-eye" (click)="showConfirmPwd = !showConfirmPwd">
@@ -731,34 +734,34 @@ export class ProfileComponent implements OnInit {
   activeTab: 'personal' | 'address' | 'bank' | 'password' = 'personal';
 
   profile: UserProfileData = {
-    userId: 1,
-    name: 'Ramesh Kumar',
-    email: 'ramesh.kumar@gmail.com',
-    phone: '+91 98765 43210',
-    role: 'FARMER',
-    address: '123, North Street, Pallipalayam, Erode, Tamil Nadu - 638006'
+    userId: null as any,
+    name: null as any,
+    email: null as any,
+    phone: null as any,
+    role: null as any,
+    address: null as any
   };
 
   // Personal
-  dateOfBirth = '12 Jan 1990';
-  gender = 'Male';
-  farmerType = 'Individual Farmer';
-  aadhaarNumber = '4589 1234 5678';
+  dateOfBirth: string | null = null;
+  gender: string | null = null;
+  farmerType: string | null = null;
+  aadhaarNumber: string | null = null;
   showAadhaar = false;
 
   // Address
-  addressLine1 = '123, North Street';
-  addressLine2 = 'Pallipalayam';
-  city = 'Erode';
-  state = 'Tamil Nadu';
-  pincode = '638006';
+  addressLine1: string | null = null;
+  addressLine2: string | null = null;
+  city: string | null = null;
+  state: string | null = null;
+  pincode: string | null = null;
 
   // Bank
-  accountHolderName = 'Ramesh Kumar';
-  bankName = 'State Bank of India';
-  accountNumber = '987654321012';
-  ifscCode = 'SBIN0001234';
-  accountType = 'Savings Account';
+  accountHolderName: string | null = null;
+  bankName: string | null = null;
+  accountNumber: string | null = null;
+  ifscCode: string | null = null;
+  accountType: string | null = null;
   showAccountNum = false;
 
   // Password
@@ -782,34 +785,32 @@ export class ProfileComponent implements OnInit {
     this.authService.currentUser$.subscribe((u: User | null) => {
       if (u) {
         if (u.avatar) this.profileAvatar = u.avatar;
-        if (u.fullName) this.profile.name = u.fullName;
-        if (u.email) this.profile.email = u.email;
-        if (u.phone) this.profile.phone = u.phone;
-        if (u.role) this.profile.role = u.role;
-        if (u.address) {
-          this.profile.address = u.address;
-          this.addressLine1 = u.address;
-        }
+        this.profile.name = u.fullName || u.username || null as any;
+        this.profile.email = u.email || null as any;
+        this.profile.phone = u.phone || null as any;
+        this.profile.role = u.role || null as any;
+        this.profile.address = u.address || null as any;
+        this.addressLine1 = u.address || null;
 
         const uid = u.id || u.userId || 'default-user';
         const savedExtra = localStorage.getItem('cropdeal_profile_extra_' + uid);
         if (savedExtra) {
           try {
             const data = JSON.parse(savedExtra);
-            if (data.aadhaarNumber) this.aadhaarNumber = data.aadhaarNumber;
-            if (data.dateOfBirth) this.dateOfBirth = data.dateOfBirth;
-            if (data.gender) this.gender = data.gender;
-            if (data.farmerType) this.farmerType = data.farmerType;
-            if (data.addressLine1) this.addressLine1 = data.addressLine1;
-            if (data.addressLine2) this.addressLine2 = data.addressLine2;
-            if (data.city) this.city = data.city;
-            if (data.state) this.state = data.state;
-            if (data.pincode) this.pincode = data.pincode;
-            if (data.accountHolderName) this.accountHolderName = data.accountHolderName;
-            if (data.bankName) this.bankName = data.bankName;
-            if (data.accountNumber) this.accountNumber = data.accountNumber;
-            if (data.ifscCode) this.ifscCode = data.ifscCode;
-            if (data.accountType) this.accountType = data.accountType;
+            if (data.aadhaarNumber != null) this.aadhaarNumber = data.aadhaarNumber;
+            if (data.dateOfBirth != null) this.dateOfBirth = data.dateOfBirth;
+            if (data.gender != null) this.gender = data.gender;
+            if (data.farmerType != null) this.farmerType = data.farmerType;
+            if (data.addressLine1 != null) this.addressLine1 = data.addressLine1;
+            if (data.addressLine2 != null) this.addressLine2 = data.addressLine2;
+            if (data.city != null) this.city = data.city;
+            if (data.state != null) this.state = data.state;
+            if (data.pincode != null) this.pincode = data.pincode;
+            if (data.accountHolderName != null) this.accountHolderName = data.accountHolderName;
+            if (data.bankName != null) this.bankName = data.bankName;
+            if (data.accountNumber != null) this.accountNumber = data.accountNumber;
+            if (data.ifscCode != null) this.ifscCode = data.ifscCode;
+            if (data.accountType != null) this.accountType = data.accountType;
           } catch (e) {
             console.error('Error parsing profile extras:', e);
           }
@@ -845,21 +846,33 @@ export class ProfileComponent implements OnInit {
     if (user) {
       const updatedUser: User = {
         ...user,
-        fullName: this.profile.name,
-        email: this.profile.email,
-        phone: this.profile.phone
+        fullName: this.profile.name || user.fullName,
+        email: this.profile.email || user.email || '',
+        phone: this.profile.phone || user.phone
       };
       this.authService.updateStoredUser(updatedUser);
       this.userService.updateMasterUser({
         id: user.id,
         role: user.role,
-        fullName: this.profile.name,
-        email: this.profile.email,
-        phone: this.profile.phone
+        fullName: this.profile.name || undefined,
+        email: this.profile.email || undefined,
+        phone: this.profile.phone || undefined
       });
+
+      this.userService.updateProfile(user.role, {
+        userId: user.id,
+        name: this.profile.name,
+        email: this.profile.email,
+        phone: this.profile.phone,
+        address: this.profile.address || this.addressLine1,
+        role: user.role,
+        farmLocation: this.profile.address || this.addressLine1,
+        businessName: this.profile.name,
+        bankDetails: `${this.bankName} - A/C: ${this.accountNumber} - IFSC: ${this.ifscCode}`
+      }).subscribe();
     }
     this.persistExtras();
-    this.successMessage = 'Profile information updated successfully!';
+    this.successMessage = 'Profile information updated and saved in database!';
     setTimeout(() => this.successMessage = '', 4000);
   }
 
@@ -878,15 +891,42 @@ export class ProfileComponent implements OnInit {
         role: user.role,
         address: fullAddr
       });
+
+      this.userService.updateProfile(user.role, {
+        userId: user.id,
+        name: this.profile.name || user.fullName,
+        email: this.profile.email || user.email,
+        phone: this.profile.phone || user.phone,
+        address: fullAddr,
+        role: user.role,
+        farmLocation: fullAddr,
+        businessName: this.profile.name || user.fullName,
+        bankDetails: `${this.bankName} - A/C: ${this.accountNumber} - IFSC: ${this.ifscCode}`
+      }).subscribe();
     }
     this.persistExtras();
-    this.successMessage = 'Address updated successfully!';
+    this.successMessage = 'Address updated and saved in database!';
     setTimeout(() => this.successMessage = '', 4000);
   }
 
   saveBankDetails(): void {
+    const bankStr = `${this.bankName} - A/C: ${this.accountNumber} - IFSC: ${this.ifscCode}`;
+    const user = this.authService.currentUserValue;
+    if (user) {
+      this.userService.updateProfile(user.role, {
+        userId: user.id,
+        name: this.profile.name || user.fullName,
+        email: this.profile.email || user.email,
+        phone: this.profile.phone || user.phone,
+        address: this.profile.address || user.address,
+        role: user.role,
+        farmLocation: this.profile.address || user.address,
+        businessName: this.profile.name || user.fullName,
+        bankDetails: bankStr
+      }).subscribe();
+    }
     this.persistExtras();
-    this.successMessage = 'Bank settlement details updated successfully!';
+    this.successMessage = 'Bank settlement details updated and saved in database!';
     setTimeout(() => this.successMessage = '', 4000);
   }
 

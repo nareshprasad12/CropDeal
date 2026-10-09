@@ -135,9 +135,10 @@ import { User } from '../../core/models/user.model';
                   <div class="party-icon farmer-icon"><i class="fa-solid fa-wheat-awn"></i></div>
                   <div class="party-text">
                     <span class="party-role">Pickup Origin (Farmer)</span>
-                    <strong>{{ item.farmerName }}</strong>
-                    <a href="tel:{{ item.farmerPhone }}" class="phone-link"><i class="fa-solid fa-phone"></i> {{ item.farmerPhone }}</a>
-                    <p class="address-text"><i class="fa-solid fa-location-dot"></i> {{ item.pickupAddress }}</p>
+                    <strong>{{ item.farmerName != null ? item.farmerName : 'null' }}</strong>
+                    <a *ngIf="item.farmerPhone" href="tel:{{ item.farmerPhone }}" class="phone-link"><i class="fa-solid fa-phone"></i> {{ item.farmerPhone }}</a>
+                    <span *ngIf="!item.farmerPhone" class="phone-link text-muted"><i class="fa-solid fa-phone"></i> null</span>
+                    <p class="address-text"><i class="fa-solid fa-location-dot"></i> {{ item.pickupAddress != null ? item.pickupAddress : 'null' }}</p>
                   </div>
                 </div>
 
@@ -147,9 +148,10 @@ import { User } from '../../core/models/user.model';
                   <div class="party-icon dealer-icon"><i class="fa-solid fa-warehouse"></i></div>
                   <div class="party-text">
                     <span class="party-role">Drop Destination (Dealer)</span>
-                    <strong>{{ item.dealerName }}</strong>
-                    <a href="tel:{{ item.dealerPhone }}" class="phone-link"><i class="fa-solid fa-phone"></i> {{ item.dealerPhone }}</a>
-                    <p class="address-text"><i class="fa-solid fa-location-crosshairs"></i> {{ item.dropAddress }}</p>
+                    <strong>{{ item.dealerName != null ? item.dealerName : 'null' }}</strong>
+                    <a *ngIf="item.dealerPhone" href="tel:{{ item.dealerPhone }}" class="phone-link"><i class="fa-solid fa-phone"></i> {{ item.dealerPhone }}</a>
+                    <span *ngIf="!item.dealerPhone" class="phone-link text-muted"><i class="fa-solid fa-phone"></i> null</span>
+                    <p class="address-text"><i class="fa-solid fa-location-crosshairs"></i> {{ item.dropAddress != null ? item.dropAddress : 'null' }}</p>
                   </div>
                 </div>
               </div>
@@ -216,9 +218,10 @@ import { User } from '../../core/models/user.model';
                   <div class="party-icon farmer-icon"><i class="fa-solid fa-wheat-awn"></i></div>
                   <div class="party-text">
                     <span class="party-role">Pickup Origin (Farmer)</span>
-                    <strong>{{ item.farmerName }}</strong>
-                    <a href="tel:{{ item.farmerPhone }}" class="phone-link"><i class="fa-solid fa-phone"></i> {{ item.farmerPhone }}</a>
-                    <p class="address-text">{{ item.pickupAddress }}</p>
+                    <strong>{{ item.farmerName != null ? item.farmerName : 'null' }}</strong>
+                    <a *ngIf="item.farmerPhone" href="tel:{{ item.farmerPhone }}" class="phone-link"><i class="fa-solid fa-phone"></i> {{ item.farmerPhone }}</a>
+                    <span *ngIf="!item.farmerPhone" class="phone-link text-muted"><i class="fa-solid fa-phone"></i> null</span>
+                    <p class="address-text">{{ item.pickupAddress != null ? item.pickupAddress : 'null' }}</p>
                   </div>
                 </div>
 
@@ -228,9 +231,10 @@ import { User } from '../../core/models/user.model';
                   <div class="party-icon dealer-icon"><i class="fa-solid fa-warehouse"></i></div>
                   <div class="party-text">
                     <span class="party-role">Drop Destination (Dealer)</span>
-                    <strong>{{ item.dealerName }}</strong>
-                    <a href="tel:{{ item.dealerPhone }}" class="phone-link"><i class="fa-solid fa-phone"></i> {{ item.dealerPhone }}</a>
-                    <p class="address-text">{{ item.dropAddress }}</p>
+                    <strong>{{ item.dealerName != null ? item.dealerName : 'null' }}</strong>
+                    <a *ngIf="item.dealerPhone" href="tel:{{ item.dealerPhone }}" class="phone-link"><i class="fa-solid fa-phone"></i> {{ item.dealerPhone }}</a>
+                    <span *ngIf="!item.dealerPhone" class="phone-link text-muted"><i class="fa-solid fa-phone"></i> null</span>
+                    <p class="address-text">{{ item.dropAddress != null ? item.dropAddress : 'null' }}</p>
                   </div>
                 </div>
               </div>
@@ -286,11 +290,11 @@ import { User } from '../../core/models/user.model';
               </div>
 
               <div class="meta-row mt-3">
-                <span>Farmer: <strong>{{ item.farmerName }}</strong> ({{ item.farmerPhone }})</span>
-                <span>Dealer: <strong>{{ item.dealerName }}</strong> ({{ item.dealerPhone }})</span>
+                <span>Farmer: <strong>{{ item.farmerName != null ? item.farmerName : 'null' }}</strong> ({{ item.farmerPhone != null ? item.farmerPhone : 'null' }})</span>
+                <span>Dealer: <strong>{{ item.dealerName != null ? item.dealerName : 'null' }}</strong> ({{ item.dealerPhone != null ? item.dealerPhone : 'null' }})</span>
               </div>
               <div class="meta-row mt-2">
-                <span>Route: {{ item.pickupAddress }} &rarr; {{ item.dropAddress }}</span>
+                <span>Route: {{ item.pickupAddress != null ? item.pickupAddress : 'null' }} &rarr; {{ item.dropAddress != null ? item.dropAddress : 'null' }}</span>
                 <span>Distance: <strong>{{ item.distanceKm }} km</strong></span>
               </div>
             </div>
@@ -389,18 +393,18 @@ import { User } from '../../core/models/user.model';
                 <div class="route-point">
                   <i class="fa-solid fa-circle-dot text-emerald"></i>
                   <div>
-                    <span class="point-lbl">Farm-Gate Pickup ({{ item.farmerName || 'Farmer' }})</span>
-                    <p>{{ item.pickupAddress }}</p>
-                    <span class="subtext" *ngIf="item.farmerPhone"><i class="fa-solid fa-phone"></i> {{ item.farmerPhone }}</span>
+                    <span class="point-lbl">Farm-Gate Pickup ({{ item.farmerName != null ? item.farmerName : 'null' }})</span>
+                    <p>{{ item.pickupAddress != null ? item.pickupAddress : 'null' }}</p>
+                    <span class="subtext"><i class="fa-solid fa-phone"></i> {{ item.farmerPhone != null ? item.farmerPhone : 'null' }}</span>
                   </div>
                 </div>
                 <div class="route-line-v"></div>
                 <div class="route-point">
                   <i class="fa-solid fa-location-dot text-danger"></i>
                   <div>
-                    <span class="point-lbl">Delivery Destination ({{ item.dealerName || 'Dealer' }})</span>
-                    <p>{{ item.dropAddress }}</p>
-                    <span class="subtext" *ngIf="item.dealerPhone"><i class="fa-solid fa-phone"></i> {{ item.dealerPhone }}</span>
+                    <span class="point-lbl">Delivery Destination ({{ item.dealerName != null ? item.dealerName : 'null' }})</span>
+                    <p>{{ item.dropAddress != null ? item.dropAddress : 'null' }}</p>
+                    <span class="subtext"><i class="fa-solid fa-phone"></i> {{ item.dealerPhone != null ? item.dealerPhone : 'null' }}</span>
                   </div>
                 </div>
               </div>
@@ -489,18 +493,18 @@ import { User } from '../../core/models/user.model';
               <div class="route-point">
                 <i class="fa-solid fa-circle-dot text-emerald"></i>
                 <div>
-                  <span class="point-lbl">Farm / Mandi Pickup ({{ item.farmerName || 'Farmer' }})</span>
-                  <p>{{ item.pickupAddress }}</p>
-                  <span class="subtext" *ngIf="item.farmerPhone"><i class="fa-solid fa-phone"></i> {{ item.farmerPhone }}</span>
+                  <span class="point-lbl">Farm / Mandi Pickup ({{ item.farmerName != null ? item.farmerName : 'null' }})</span>
+                  <p>{{ item.pickupAddress != null ? item.pickupAddress : 'null' }}</p>
+                  <span class="subtext"><i class="fa-solid fa-phone"></i> {{ item.farmerPhone != null ? item.farmerPhone : 'null' }}</span>
                 </div>
               </div>
               <div class="route-line-v"></div>
               <div class="route-point">
                 <i class="fa-solid fa-location-dot text-danger"></i>
                 <div>
-                  <span class="point-lbl">Commercial Delivery Mandi ({{ item.dealerName || 'Dealer' }})</span>
-                  <p>{{ item.dropAddress }}</p>
-                  <span class="subtext" *ngIf="item.dealerPhone"><i class="fa-solid fa-phone"></i> {{ item.dealerPhone }}</span>
+                  <span class="point-lbl">Commercial Delivery Mandi ({{ item.dealerName != null ? item.dealerName : 'null' }})</span>
+                  <p>{{ item.dropAddress != null ? item.dropAddress : 'null' }}</p>
+                  <span class="subtext"><i class="fa-solid fa-phone"></i> {{ item.dealerPhone != null ? item.dealerPhone : 'null' }}</span>
                 </div>
               </div>
             </div>
@@ -889,19 +893,12 @@ export class DeliveriesComponent implements OnInit {
       this.showAlert(`Order #${item.orderId} accepted! Assigned to your trip. Ready for pickup at ${item.pickupAddress}.`);
       this.orderService.updateOrderStatus(item.orderId, 'ASSIGNED').subscribe();
 
-      // Notify dealer and farmer
+      // Notify dealer
       const dealerId = item.dealerId || 'dealer-1';
-      const farmerId = item.farmerId || 'farmer-1';
       this.notificationService.sendNotification(
         dealerId,
         '🚚 Carrier Assigned',
         `Logistics carrier ${partnerName} has accepted pickup for order #${item.orderId} (${item.cropName}).`,
-        'DELIVERY'
-      );
-      this.notificationService.sendNotification(
-        farmerId,
-        '🚚 Pickup Scheduled',
-        `Logistics carrier ${partnerName} will arrive at your farm gate for order #${item.orderId} (${item.cropName}).`,
         'DELIVERY'
       );
     });
@@ -910,7 +907,6 @@ export class DeliveriesComponent implements OnInit {
   advanceStatus(item: Delivery, nextStatus: 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED'): void {
     this.deliveryService.updateDeliveryStatus(item.id, nextStatus).subscribe(() => {
       const dealerId = item.dealerId || 'dealer-1';
-      const farmerId = item.farmerId || 'farmer-1';
 
       if (nextStatus === 'DELIVERED') {
         const partnerId = this.currentUser?.id || this.currentUser?.userId || 'delivery_partner-1';
@@ -929,17 +925,11 @@ export class DeliveriesComponent implements OnInit {
         // Update corresponding order status to DELIVERED so receipt download is unlocked
         this.orderService.updateOrderStatus(item.orderId, 'DELIVERED').subscribe();
 
-        // Send real-time notifications
+        // Send real-time notifications to dealer
         this.notificationService.sendNotification(
           dealerId,
           '✅ Order Delivered Successfully',
           `Your order #${item.orderId} (${item.cropName}) has been delivered! Official GST tax invoice receipt is ready for download in Orders.`,
-          'DELIVERY'
-        );
-        this.notificationService.sendNotification(
-          farmerId,
-          '✅ Order Delivery Completed',
-          `Order #${item.orderId} (${item.cropName}) has reached dealer facility. Escrow payment settlement is released.`,
           'DELIVERY'
         );
       } else if (nextStatus === 'PICKED_UP') {
@@ -949,13 +939,7 @@ export class DeliveriesComponent implements OnInit {
         this.notificationService.sendNotification(
           dealerId,
           '🚚 Produce Picked Up from Farm Gate',
-          `Your order #${item.orderId} (${item.cropName}) has been picked up from farmer ${item.farmerName}.`,
-          'DELIVERY'
-        );
-        this.notificationService.sendNotification(
-          farmerId,
-          '🚚 Produce Picked Up',
-          `Logistics partner has picked up your harvest for order #${item.orderId} (${item.cropName}).`,
+          `Your order #${item.orderId} (${item.cropName}) has been picked up from farmer ${item.farmerName != null ? item.farmerName : 'null'}.`,
           'DELIVERY'
         );
       } else if (nextStatus === 'IN_TRANSIT') {
@@ -966,12 +950,6 @@ export class DeliveriesComponent implements OnInit {
           dealerId,
           '🚚 Shipment In Transit',
           `Your order #${item.orderId} (${item.cropName}) is on the road heading to your warehouse drop location.`,
-          'DELIVERY'
-        );
-        this.notificationService.sendNotification(
-          farmerId,
-          '🚚 Shipment In Transit to Buyer',
-          `Shipment for order #${item.orderId} (${item.cropName}) is traveling to dealer warehouse.`,
           'DELIVERY'
         );
       }

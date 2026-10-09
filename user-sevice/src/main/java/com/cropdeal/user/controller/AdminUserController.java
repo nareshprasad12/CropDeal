@@ -67,7 +67,7 @@ public class AdminUserController {
         // 1. Administrator Account (Protected superuser)
         if (includeAll || role.equalsIgnoreCase("ADMIN")) {
             userSummaries.add(new UserManagementSummaryResponse(
-                    1L,
+                    4L,
                     "System Administrator",
                     "+91 99999 99999",
                     "ADMIN",
@@ -168,7 +168,7 @@ public class AdminUserController {
             @RequestParam(defaultValue = "Blocked by Administrator") String reason,
             HttpServletRequest httpRequest
     ) {
-        if (userId != null && userId == 1L) {
+        if (userId != null && userId == 4L) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Bad Request",
                     "message", "Administrator account cannot be blocked"

@@ -106,20 +106,6 @@ import { Crop } from '../../core/models/crop.model';
                 <td class="text-right">
                   <div class="btn-group justify-end">
                     <button
-                      *ngIf="c.status !== 'BLOCKED'"
-                      class="btn btn-outline-danger btn-sm"
-                      (click)="toggleBlockCrop(c, true)"
-                      title="Block Crop from Marketplace">
-                      <i class="fa-solid fa-ban"></i> Block
-                    </button>
-                    <button
-                      *ngIf="c.status === 'BLOCKED'"
-                      class="btn btn-outline-success btn-sm"
-                      (click)="toggleBlockCrop(c, false)"
-                      title="Unblock Crop">
-                      <i class="fa-solid fa-unlock"></i> Unblock
-                    </button>
-                    <button
                       class="btn btn-danger btn-sm"
                       (click)="deleteCrop(c)"
                       title="Permanently Delete Crop">
@@ -183,18 +169,6 @@ import { Crop } from '../../core/models/crop.model';
             </div>
           </div>
           <div class="modal-footer">
-            <button
-              *ngIf="selectedCrop.status !== 'BLOCKED'"
-              class="btn btn-warning"
-              (click)="toggleBlockCrop(selectedCrop, true); selectedCrop = null">
-              <i class="fa-solid fa-ban"></i> Block Crop
-            </button>
-            <button
-              *ngIf="selectedCrop.status === 'BLOCKED'"
-              class="btn btn-success"
-              (click)="toggleBlockCrop(selectedCrop, false); selectedCrop = null">
-              <i class="fa-solid fa-unlock"></i> Unblock Crop
-            </button>
             <button class="btn btn-secondary" (click)="selectedCrop = null">Close</button>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { OrderService } from '../../core/services/order.service';
 import { DeliveryService } from '../../core/services/delivery.service';
 import { WalletService } from '../../core/services/wallet.service';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { PaymentService } from '../../core/services/payment.service';
 import { CropService } from '../../core/services/crop.service';
 import { Negotiation } from '../../core/models/negotiation.model';
 import { User } from '../../core/models/user.model';
@@ -19,14 +20,14 @@ export interface UINegotiationItem {
   id: number | string;
   cropId?: string;
   cropName: string;
-  grade: string;
+  grade?: string;
   quantity: string;
   numericQty?: number;
   unit?: string;
-  img: string;
+  img?: string;
   dealerName: string;
-  dealerLocation: string;
-  dealerPhone: string;
+  dealerLocation?: string;
+  dealerPhone?: string;
   farmerName: string;
   farmerLocation?: string;
   farmerPhone?: string;
@@ -34,13 +35,17 @@ export interface UINegotiationItem {
   farmerId?: string;
   standardPrice: number;
   expectedCounter: number;
-  expectedParty: string;
+  expectedParty?: string;
   currentCounter: number | null;
   currentParty: string | null;
   status: 'WAITING' | 'COUNTERED' | 'NEGOTIATING' | 'ACCEPTED' | 'REJECTED' | 'ORDER_PLACED';
   statusText: string;
   rawNeg?: Negotiation;
   createdAt?: string;
+  updatedAt?: string;
+  isDealerTurn?: boolean;
+  isFarmerTurn?: boolean;
+  lastCounterBy?: string;
 }
 
 @Component({
@@ -1906,6 +1911,7 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
     private deliveryService: DeliveryService,
     private walletService: WalletService,
     private invoiceService: InvoiceService,
+    private paymentService: PaymentService,
     private cropService: CropService,
     private router: Router
   ) {}
@@ -1941,11 +1947,42 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
     this.items = this.loadStoredNegotiations();
 
     if (this.user?.id || this.user?.userId) {
-      const uid = this.user.id || this.user.userId!;
+      const uid = String(this.user.id || this.user.userId!);
       this.negotiationService.getNegotiationsByUser(uid).subscribe({
         next: (serverList) => {
           if (serverList && serverList.length > 0) {
-            // Can merge if needed
+            const mappedServerItems: UINegotiationItem[] = serverList.map(sn => ({
+              id: sn.id,
+              cropName: sn.cropName,
+              grade: 'Grade A',
+              quantity: String(sn.quantity) + ' Kg',
+              numericQty: sn.quantity,
+              unit: 'Kg',
+              img: 'assets/images/crops/wheat.jpg',
+              standardPrice: sn.originalPrice,
+              expectedCounter: sn.offeredPrice,
+              currentCounter: sn.counterPrice || sn.offeredPrice,
+              currentParty: sn.lastActionBy === 'FARMER' ? 'Farmer' : 'Dealer',
+              lastCounterBy: sn.lastActionBy === 'FARMER' ? 'Farmer' : 'Dealer',
+              status: (sn.status === 'PENDING' ? 'WAITING' : (sn.status === 'ACCEPTED' ? 'ACCEPTED' : (sn.status === 'REJECTED' ? 'REJECTED' : 'COUNTERED'))) as any,
+              statusText: sn.status,
+              isDealerTurn: this.isDealer,
+              isFarmerTurn: this.isFarmer,
+              dealerId: sn.dealerId,
+              dealerName: sn.dealerName || 'Dealer Partner',
+              farmerId: sn.farmerId,
+              farmerName: sn.farmerName || 'Farmer Partner',
+              updatedAt: sn.updatedAt || new Date().toISOString()
+            }));
+
+            const merged = [...mappedServerItems];
+            this.items.forEach(it => {
+              if (!merged.some(m => String(m.id) === String(it.id))) {
+                merged.push(it);
+              }
+            });
+            this.items = merged;
+            this.saveNegotiations();
           }
         },
         error: () => {}
@@ -2085,6 +2122,7 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
     item.status = 'ACCEPTED';
     item.statusText = 'Accepted';
     this.saveNegotiations();
+    this.negotiationService.acceptOffer(item.id).subscribe();
 
     const dealerId = item.dealerId || 'dealer-1';
     const farmerId = item.farmerId || 'farmer-1';
@@ -2111,6 +2149,7 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
     item.status = 'REJECTED';
     item.statusText = 'Rejected';
     this.saveNegotiations();
+    this.negotiationService.rejectOffer(item.id).subscribe();
 
     const dealerId = item.dealerId || 'dealer-1';
     const farmerId = item.farmerId || 'farmer-1';
@@ -2146,11 +2185,13 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
       return;
     }
     const actor = this.isDealer ? 'Dealer' : 'Farmer';
+    const actorId = this.user?.id ? Number(this.user.id) : (this.isDealer ? 2 : 1);
     this.activeCounterItem.currentCounter = this.counterPriceInput;
     this.activeCounterItem.currentParty = actor;
     this.activeCounterItem.status = 'COUNTERED';
     this.activeCounterItem.statusText = `${actor} Countered`;
     this.saveNegotiations();
+    this.negotiationService.counterOffer(this.activeCounterItem.id, this.counterPriceInput, this.counterNoteInput, actorId).subscribe();
 
     const dealerId = this.activeCounterItem.dealerId || 'dealer-1';
     const farmerId = this.activeCounterItem.farmerId || 'farmer-1';
@@ -2420,22 +2461,55 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
         this.deliveryService.createDelivery({
           orderId: orderId,
           dealerId: uid,
-          farmerId: item.farmerId || 'farmer-1',
+          farmerId: item.farmerId || null as any,
           cropName: item.cropName,
           cropQuantity: this.orderQuantity,
           cropUnit: item.unit || 'Kg',
-          farmerName: item.farmerName,
-          farmerPhone: item.farmerPhone || '+91 98140 11223',
-          pickupAddress: item.farmerLocation || 'Farm Gate Pickup',
-          dealerName: this.user?.fullName || this.user?.username || 'Apex Agro Mills Ltd',
-          dealerPhone: this.user?.phone || '+91 98722 55667',
+          farmerName: item.farmerName || null as any,
+          farmerPhone: item.farmerPhone || null as any,
+          pickupAddress: item.farmerLocation || null as any,
+          dealerName: this.user?.fullName || this.user?.username || null as any,
+          dealerPhone: this.user?.phone || null as any,
           dropAddress: effectiveDropAddress,
           distanceKm: this.distanceKm,
           deliveryFee: this.deliveryCharge,
           fulfillmentType: 'DELIVERY_AGENT',
           status: 'PENDING_ASSIGNMENT'
         }).subscribe();
+      } else {
+        this.deliveryService.createDelivery({
+          orderId: orderId,
+          fulfillmentType: 'SELF_PICKUP',
+          dealerId: uid,
+          farmerId: item.farmerId || null as any,
+          cropName: item.cropName,
+          cropQuantity: this.orderQuantity,
+          cropUnit: item.unit || 'Kg',
+          farmerName: item.farmerName || null as any,
+          farmerPhone: item.farmerPhone || null as any,
+          pickupAddress: item.farmerLocation || null as any,
+          dealerName: this.user?.fullName || this.user?.username || null as any,
+          dealerPhone: this.user?.phone || null as any,
+          dropAddress: 'Self Pickup by Dealer',
+          status: 'DELIVERED'
+        }).subscribe();
       }
+
+      const numOrderId = parseInt(String(orderId).replace(/\D/g, ''), 10) || 1001;
+      const numDealerId = parseInt(String(uid).replace(/\D/g, ''), 10) || 2;
+      const numFarmerId = parseInt(String(item.farmerId || '1').replace(/\D/g, ''), 10) || 1;
+
+      // Persist Payment in PaymentService
+      this.paymentService.makePayment({
+        orderId: numOrderId,
+        dealerId: numDealerId,
+        farmerId: numFarmerId,
+        amount: finalTotal,
+        paymentMethod: this.paymentMethod
+      }).subscribe();
+
+      // Persist Invoice in InvoiceService
+      this.invoiceService.createInvoice(inv).subscribe();
 
       // Persist order in OrderService
       this.orderService.createOrder(orderReq).subscribe({
@@ -2487,8 +2561,9 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
     this.notificationService.sendNotification(
       item.farmerId || 'farmer-1',
       '🎉 Deal Finalized & Paid',
-      `Dealer ${this.user?.fullName || 'Apex Agro Mills'} placed order #${orderId} for ${item.cropName} (${this.orderQuantity} Kg) at ₹${this.checkoutRate}/Kg.`,
-      'ORDER'
+      `Dealer ${this.user?.fullName || 'Buyer'} placed order #${orderId} for ${item.cropName} (${this.orderQuantity} Kg) at ₹${this.checkoutRate}/Kg.`,
+      'ORDER',
+      'farmer'
     );
 
     this.processingPayment = false;

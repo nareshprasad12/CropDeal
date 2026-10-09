@@ -545,123 +545,204 @@ interface UIOrderItem {
 
       <!-- Dealer Delivery Status Modal -->
       <div *ngIf="deliveryStatusOrder" class="modal-overlay" (click)="deliveryStatusOrder = null">
-        <div class="modal-content shadow-lg" style="max-width: 620px;" (click)="$event.stopPropagation()">
-          <div class="modal-header d-flex justify-content-between align-center">
-            <h3><i class="fa-solid fa-truck text-emerald"></i> Order Delivery Tracking</h3>
+        <div class="modal-content delivery-modal shadow-2xl" (click)="$event.stopPropagation()">
+          <!-- Header -->
+          <div class="delivery-modal-header">
+            <div class="d-flex align-center gap-3">
+              <div class="tracking-icon-pill">
+                <i class="fa-solid fa-truck-ramp-box"></i>
+              </div>
+              <div>
+                <h3 class="tracking-title m-0">Live Delivery Tracking</h3>
+                <span class="tracking-subtitle">Waybill: <strong>{{ getTrackingNumber(deliveryStatusOrder) }}</strong></span>
+              </div>
+            </div>
             <div class="d-flex align-center gap-2">
-              <button class="btn btn-sm btn-outline-primary" (click)="refreshTrackingModal()" title="Fetch freshest live milestone">
-                <i class="fa-solid fa-arrows-rotate"></i> Refresh Status
+              <button class="btn-refresh-track" (click)="refreshTrackingModal()" [disabled]="isRefreshingStatus" title="Refresh live status">
+                <i class="fa-solid fa-arrows-rotate" [class.fa-spin]="isRefreshingStatus"></i>
+                <span class="d-none-mobile">{{ isRefreshingStatus ? 'Refreshing...' : 'Refresh' }}</span>
               </button>
-              <button class="close-btn" (click)="deliveryStatusOrder = null">&times;</button>
+              <button class="close-track-btn" (click)="deliveryStatusOrder = null" title="Close dialog">&times;</button>
             </div>
           </div>
-          <div class="modal-body">
-            <div class="delivery-status-header">
-              <div>
-                <strong>Order #{{ deliveryStatusOrder.orderNumber }}</strong>
-                <span class="subtext d-block">{{ deliveryStatusOrder.cropName }} ({{ deliveryStatusOrder.quantityKg }} kg)</span>
-              </div>
-              <span class="order-status-badge" [ngClass]="{
-                'status-delivered': getEffectiveStatus(deliveryStatusOrder) === 'DELIVERED',
-                'status-transit': getEffectiveStatus(deliveryStatusOrder) === 'IN_TRANSIT',
-                'status-picked': getEffectiveStatus(deliveryStatusOrder) === 'PICKED_UP',
-                'status-assigned': getEffectiveStatus(deliveryStatusOrder) === 'ASSIGNED',
-                'status-confirmed': getEffectiveStatus(deliveryStatusOrder) === 'CONFIRMED' || getEffectiveStatus(deliveryStatusOrder) === 'PAID'
-              }">
-                <span class="status-dot"></span>
-                {{ getStatusBadgeText(deliveryStatusOrder) }}
-              </span>
-            </div>
 
-            <!-- Carrier and Consignment Details Card -->
-            <div class="carrier-info-card mt-3">
-              <div class="d-flex justify-content-between align-center flex-wrap gap-2">
-                <div>
-                  <span class="text-xs text-muted d-block">Logistics Carrier</span>
-                  <strong><i class="fa-solid fa-truck-moving text-emerald"></i> {{ deliveryStatusOrder.deliveryInfo?.partnerName || 'Kisan Express Agro Logistics' }}</strong>
+          <div class="delivery-modal-body">
+            <!-- Hero Status Card -->
+            <div class="tracking-hero-card">
+              <div class="hero-top-row">
+                <div class="order-identity">
+                  <span class="order-num-tag">#{{ deliveryStatusOrder.orderNumber }}</span>
+                  <h4 class="crop-heading">{{ deliveryStatusOrder.cropName }}</h4>
+                  <span class="crop-meta">{{ deliveryStatusOrder.quantityKg | number }} kg • &#8377;{{ deliveryStatusOrder.totalAmount | number:'1.0-0' }} Total</span>
                 </div>
-                <div>
-                  <span class="text-xs text-muted d-block">Tracking Waybill #</span>
-                  <span class="font-mono text-xs font-bold text-dark">{{ deliveryStatusOrder.deliveryInfo?.trackingNumber || ('TRK-IN-' + deliveryStatusOrder.orderNumber.replace('ORD-', '')) }}</span>
-                </div>
-                <div>
-                  <span class="text-xs text-muted d-block">Carrier Helpline</span>
-                  <span class="text-xs font-bold text-emerald">
-                    <i class="fa-solid fa-phone"></i> {{ deliveryStatusOrder.deliveryInfo?.partnerPhone || '+91 98888 22110' }}
+                <div class="status-badge-wrap">
+                  <span class="order-status-badge badge-large" [ngClass]="{
+                    'status-delivered': getEffectiveStatus(deliveryStatusOrder) === 'DELIVERED',
+                    'status-transit': getEffectiveStatus(deliveryStatusOrder) === 'IN_TRANSIT',
+                    'status-picked': getEffectiveStatus(deliveryStatusOrder) === 'PICKED_UP',
+                    'status-assigned': getEffectiveStatus(deliveryStatusOrder) === 'ASSIGNED',
+                    'status-confirmed': getEffectiveStatus(deliveryStatusOrder) === 'CONFIRMED' || getEffectiveStatus(deliveryStatusOrder) === 'PAID'
+                  }">
+                    <span class="status-dot"></span>
+                    {{ getStatusBadgeText(deliveryStatusOrder) }}
                   </span>
                 </div>
               </div>
-            </div>
 
-            <div class="delivery-locations mt-3">
-              <div class="loc-step">
-                <i class="fa-solid fa-location-dot text-emerald"></i>
-                <div>
-                  <span class="loc-lbl">Origin / Farmer Pickup Location:</span>
-                  <strong>{{ deliveryStatusOrder.farmerLocation }}</strong>
-                </div>
-              </div>
-              <div class="loc-step mt-2">
-                <i class="fa-solid fa-warehouse text-primary"></i>
-                <div>
-                  <span class="loc-lbl">Destination / Warehouse Drop:</span>
-                  <strong>{{ deliveryStatusOrder.deliveryAddress }}</strong>
-                </div>
+              <!-- Live ETA Strip -->
+              <div class="eta-strip mt-3">
+                <i class="fa-solid fa-circle-notch fa-spin text-emerald" *ngIf="getEffectiveStatus(deliveryStatusOrder) === 'IN_TRANSIT'"></i>
+                <i class="fa-solid fa-circle-check text-emerald" *ngIf="getEffectiveStatus(deliveryStatusOrder) === 'DELIVERED'"></i>
+                <i class="fa-solid fa-clock text-amber" *ngIf="getEffectiveStatus(deliveryStatusOrder) !== 'DELIVERED' && getEffectiveStatus(deliveryStatusOrder) !== 'IN_TRANSIT'"></i>
+                <span>{{ getEstimatedEta(deliveryStatusOrder) }}</span>
               </div>
             </div>
 
-            <div class="fulfillment-mode-box mt-3">
-              <span class="log-lbl">Fulfillment Mode:</span>
-              <strong>{{ deliveryStatusOrder.fulfillmentType === 'SELF_PICKUP' ? 'Self Pickup at Farm Gate (Zero Fee)' : 'Express Agro Logistics (' + (deliveryStatusOrder.distanceKm || 15) + ' km • ₹' + deliveryStatusOrder.deliveryFee + ')' }}</strong>
+            <!-- Milestone Tracker (5 Steps: Confirmed -> Assigned -> Picked Up -> In Transit -> Delivered) -->
+            <div class="stepper-box mt-3">
+              <div class="stepper-title-row">
+                <span class="stepper-section-title"><i class="fa-solid fa-route text-emerald"></i> Transit Progress</span>
+                <span class="stepper-current-label">Stage {{ isMilestoneCompleted(deliveryStatusOrder, 5) ? '5 of 5' : (isMilestoneCompleted(deliveryStatusOrder, 4) ? '4 of 5' : (isMilestoneCompleted(deliveryStatusOrder, 3) ? '3 of 5' : (isMilestoneCompleted(deliveryStatusOrder, 2) ? '2 of 5' : '1 of 5'))) }}</span>
+              </div>
+
+              <div class="transit-stepper-v2 mt-2">
+                <!-- Step 1: Placed -->
+                <div class="step-point completed">
+                  <div class="bullet"><i class="fa-solid fa-check"></i></div>
+                  <span class="step-name">Placed</span>
+                  <span class="step-sub">Confirmed</span>
+                </div>
+                <div class="step-line" [class.active]="isMilestoneActive(deliveryStatusOrder, 1)"></div>
+
+                <!-- Step 2: Assigned -->
+                <div class="step-point" [class.completed]="isMilestoneCompleted(deliveryStatusOrder, 2)" [class.current]="getEffectiveStatus(deliveryStatusOrder) === 'ASSIGNED'">
+                  <div class="bullet">
+                    <i class="fa-solid" [ngClass]="isMilestoneCompleted(deliveryStatusOrder, 2) ? 'fa-check' : 'fa-id-badge'"></i>
+                  </div>
+                  <span class="step-name">Assigned</span>
+                  <span class="step-sub">Fleet Agent</span>
+                </div>
+                <div class="step-line" [class.active]="isMilestoneActive(deliveryStatusOrder, 2)"></div>
+
+                <!-- Step 3: Picked Up -->
+                <div class="step-point" [class.completed]="isMilestoneCompleted(deliveryStatusOrder, 3)" [class.current]="getEffectiveStatus(deliveryStatusOrder) === 'PICKED_UP'">
+                  <div class="bullet">
+                    <i class="fa-solid" [ngClass]="isMilestoneCompleted(deliveryStatusOrder, 3) ? 'fa-check' : 'fa-box-open'"></i>
+                  </div>
+                  <span class="step-name">Picked Up</span>
+                  <span class="step-sub">Farm Gate</span>
+                </div>
+                <div class="step-line" [class.active]="isMilestoneActive(deliveryStatusOrder, 3)"></div>
+
+                <!-- Step 4: In Transit -->
+                <div class="step-point" [class.completed]="isMilestoneCompleted(deliveryStatusOrder, 4)" [class.current]="getEffectiveStatus(deliveryStatusOrder) === 'IN_TRANSIT'">
+                  <div class="bullet">
+                    <i class="fa-solid" [ngClass]="isMilestoneCompleted(deliveryStatusOrder, 4) ? 'fa-check' : 'fa-truck-fast'"></i>
+                  </div>
+                  <span class="step-name">In Transit</span>
+                  <span class="step-sub">On The Way</span>
+                </div>
+                <div class="step-line" [class.active]="isMilestoneActive(deliveryStatusOrder, 4)"></div>
+
+                <!-- Step 5: Delivered -->
+                <div class="step-point" [class.completed]="isMilestoneCompleted(deliveryStatusOrder, 5)" [class.current]="getEffectiveStatus(deliveryStatusOrder) === 'DELIVERED'">
+                  <div class="bullet">
+                    <i class="fa-solid" [ngClass]="isMilestoneCompleted(deliveryStatusOrder, 5) ? 'fa-check' : 'fa-house-circle-check'"></i>
+                  </div>
+                  <span class="step-name">Delivered</span>
+                  <span class="step-sub">Warehouse</span>
+                </div>
+              </div>
             </div>
 
-            <!-- Milestone Tracker (5 Steps: Placed -> Assigned -> Picked Up -> In Transit -> Delivered) -->
-            <div class="transit-stepper mt-4">
-              <!-- Step 1: Placed -->
-              <div class="step-point completed">
-                <div class="bullet"><i class="fa-solid fa-check"></i></div>
-                <span>Order Placed</span>
-              </div>
-              <div class="step-line" [class.active]="isMilestoneActive(deliveryStatusOrder, 1)"></div>
-
-              <!-- Step 2: Assigned -->
-              <div class="step-point" [class.completed]="isMilestoneCompleted(deliveryStatusOrder, 2)" [class.current]="getEffectiveStatus(deliveryStatusOrder) === 'ASSIGNED'">
-                <div class="bullet">
-                  <i class="fa-solid" [ngClass]="isMilestoneCompleted(deliveryStatusOrder, 2) ? 'fa-check' : 'fa-id-badge'"></i>
+            <!-- Details Grid: Carrier + Locations -->
+            <div class="tracking-grid mt-3">
+              <!-- Carrier Card -->
+              <div class="track-info-card">
+                <div class="track-card-head">
+                  <i class="fa-solid fa-truck-moving text-emerald"></i>
+                  <span>Logistics Carrier & Fleet</span>
                 </div>
-                <span>Partner Assigned</span>
-              </div>
-              <div class="step-line" [class.active]="isMilestoneActive(deliveryStatusOrder, 2)"></div>
-
-              <!-- Step 3: Picked Up -->
-              <div class="step-point" [class.completed]="isMilestoneCompleted(deliveryStatusOrder, 3)" [class.current]="getEffectiveStatus(deliveryStatusOrder) === 'PICKED_UP'">
-                <div class="bullet">
-                  <i class="fa-solid" [ngClass]="isMilestoneCompleted(deliveryStatusOrder, 3) ? 'fa-check' : 'fa-box'"></i>
+                <div class="track-card-content">
+                  <div class="info-row">
+                    <span class="info-lbl">Carrier Partner:</span>
+                    <strong>{{ getCarrierName(deliveryStatusOrder) }}</strong>
+                  </div>
+                  <div class="info-row mt-1">
+                    <span class="info-lbl">Tracking Waybill:</span>
+                    <div class="d-flex align-center gap-1">
+                      <code class="waybill-code">{{ getTrackingNumber(deliveryStatusOrder) }}</code>
+                      <button type="button" class="btn-copy-waybill" (click)="copyTracking(getTrackingNumber(deliveryStatusOrder))" title="Copy tracking number">
+                        <i class="fa-regular" [ngClass]="copiedTracking ? 'fa-check text-emerald' : 'fa-copy'"></i>
+                      </button>
+                      <span *ngIf="copiedTracking" class="text-xs text-emerald font-bold">Copied!</span>
+                    </div>
+                  </div>
+                  <div class="info-row mt-1">
+                    <span class="info-lbl">Carrier Helpline:</span>
+                    <a [href]="'tel:' + getCarrierPhone(deliveryStatusOrder)" class="carrier-phone-link">
+                      <i class="fa-solid fa-phone"></i> {{ getCarrierPhone(deliveryStatusOrder) }}
+                    </a>
+                  </div>
+                  <div class="info-row mt-1">
+                    <span class="info-lbl">Transport Fleet:</span>
+                    <span class="text-xs font-semibold text-slate-700">{{ getVehicleInfo(deliveryStatusOrder) }}</span>
+                  </div>
                 </div>
-                <span>Picked Up</span>
               </div>
-              <div class="step-line" [class.active]="isMilestoneActive(deliveryStatusOrder, 3)"></div>
 
-              <!-- Step 4: In Transit -->
-              <div class="step-point" [class.completed]="isMilestoneCompleted(deliveryStatusOrder, 4)" [class.current]="getEffectiveStatus(deliveryStatusOrder) === 'IN_TRANSIT'">
-                <div class="bullet">
-                  <i class="fa-solid" [ngClass]="isMilestoneCompleted(deliveryStatusOrder, 4) ? 'fa-check' : 'fa-truck-fast'"></i>
+              <!-- Route Card -->
+              <div class="track-info-card">
+                <div class="track-card-head">
+                  <i class="fa-solid fa-location-crosshairs text-primary"></i>
+                  <span>Fulfillment & Consignment Route</span>
                 </div>
-                <span>In Transit</span>
-              </div>
-              <div class="step-line" [class.active]="isMilestoneActive(deliveryStatusOrder, 4)"></div>
+                <div class="track-card-content">
+                  <div class="route-item">
+                    <div class="route-marker origin-marker">
+                      <i class="fa-solid fa-wheat-awn"></i>
+                    </div>
+                    <div class="route-text">
+                      <span class="route-lbl">Origin / Farmer Pickup</span>
+                      <strong>{{ deliveryStatusOrder.farmerLocation || 'Farmer Farm Gate / Mandi' }}</strong>
+                      <span class="subtext d-block">{{ deliveryStatusOrder.farmerName ? 'Farmer: ' + deliveryStatusOrder.farmerName : '' }}</span>
+                    </div>
+                  </div>
 
-              <!-- Step 5: Delivered -->
-              <div class="step-point" [class.completed]="isMilestoneCompleted(deliveryStatusOrder, 5)" [class.current]="getEffectiveStatus(deliveryStatusOrder) === 'DELIVERED'">
-                <div class="bullet">
-                  <i class="fa-solid" [ngClass]="isMilestoneCompleted(deliveryStatusOrder, 5) ? 'fa-check' : 'fa-house-flag'"></i>
+                  <div class="route-item mt-2">
+                    <div class="route-marker dest-marker">
+                      <i class="fa-solid fa-warehouse"></i>
+                    </div>
+                    <div class="route-text">
+                      <span class="route-lbl">Destination / Warehouse Drop</span>
+                      <strong>{{ deliveryStatusOrder.deliveryAddress || 'Dealer Commercial Hub' }}</strong>
+                      <span class="subtext d-block">{{ deliveryStatusOrder.buyerName ? 'Consignee: ' + deliveryStatusOrder.buyerName : '' }}</span>
+                    </div>
+                  </div>
+
+                  <div class="fulfillment-badge-strip mt-2">
+                    <span class="mode-tag"><i class="fa-solid fa-cubes"></i> Mode:</span>
+                    <strong>{{ deliveryStatusOrder.fulfillmentType === 'SELF_PICKUP' ? 'Self Pickup at Farm Gate (Zero Logistics Fee)' : 'Express Agro Logistics (' + (deliveryStatusOrder.distanceKm || 15) + ' km • &#8377;' + deliveryStatusOrder.deliveryFee + ')' }}</strong>
+                  </div>
                 </div>
-                <span>Delivered</span>
               </div>
             </div>
           </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" (click)="deliveryStatusOrder = null">Close</button>
+
+          <!-- Footer -->
+          <div class="delivery-modal-footer">
+            <div class="footer-help-text">
+              <i class="fa-solid fa-circle-question text-muted"></i>
+              <span>Need help? Kisan Agro Logistics Helpline: <strong>1800-419-2026</strong></span>
+            </div>
+            <div class="d-flex align-center gap-2">
+              <button class="btn btn-sm btn-outline-primary" (click)="viewInvoiceModal(deliveryStatusOrder)" title="View Invoice">
+                <i class="fa-regular fa-file-lines"></i> View Invoice
+              </button>
+              <button class="btn btn-sm btn-secondary" (click)="deliveryStatusOrder = null">
+                Close
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1170,23 +1251,425 @@ interface UIOrderItem {
     .total-grand { font-size: 1.25rem; }
     .invoice-footer-bar { padding: 1rem 1.6rem; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 0.6rem; }
 
-    /* Transit Stepper */
-    .transit-stepper { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.25rem; }
-    .step-point { display: flex; flex-direction: column; align-items: center; font-size: 0.72rem; color: #94a3b8; min-width: 65px; text-align: center; }
-    .step-point.completed { color: #16a34a; font-weight: 700; }
-    .step-point.current { color: #d97706; font-weight: 700; }
-    .step-point .bullet {
-      width: 28px; height: 28px; border-radius: 50%;
-      background: #f1f5f9; color: #64748b;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.78rem; margin-bottom: 0.35rem;
-      border: 2px solid #e2e8f0;
-      transition: all 0.3s ease;
+    /* Refined Delivery Tracking Modal Styles */
+    .delivery-modal {
+      width: 700px;
+      max-width: 95%;
+      max-height: calc(100vh - 70px - 2rem);
+      overflow-y: auto;
+      border-radius: 16px;
+      background: #ffffff;
+      box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.4);
+      margin: 0 auto;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      display: flex;
+      flex-direction: column;
+      animation: modalSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .step-point.completed .bullet { background: #16a34a !important; color: #ffffff !important; border-color: #16a34a !important; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35); }
-    .step-point.current .bullet { background: #fef3c7 !important; color: #d97706 !important; border-color: #f59e0b !important; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25); }
-    .step-line { flex: 1; height: 4px; background: #e2e8f0; margin: 0 0.35rem 1.1rem 0.35rem; border-radius: 2px; transition: all 0.4s ease; }
-    .step-line.active { background: #16a34a !important; box-shadow: 0 0 8px rgba(22, 163, 74, 0.45); }
+    @keyframes modalSlideUp {
+      from { opacity: 0; transform: translateY(14px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .delivery-modal-header {
+      padding: 1.15rem 1.5rem;
+      border-bottom: 1px solid #e2e8f0;
+      background: #ffffff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .tracking-icon-pill {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+    }
+    .tracking-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.01em;
+    }
+    .tracking-subtitle {
+      font-size: 0.78rem;
+      color: #64748b;
+      display: block;
+      margin-top: 0.15rem;
+    }
+    .btn-refresh-track {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.15s ease;
+    }
+    .btn-refresh-track:hover:not(:disabled) {
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+    .btn-refresh-track:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+    .close-track-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 1.3rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .close-track-btn:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .delivery-modal-body {
+      padding: 1.35rem 1.5rem;
+      background: #f8fafc;
+      overflow-y: auto;
+    }
+
+    /* Hero Card */
+    .tracking-hero-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.25rem 1.4rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+    }
+    .hero-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+    .order-num-tag {
+      font-family: monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      display: inline-block;
+      margin-bottom: 0.35rem;
+    }
+    .crop-heading {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0;
+    }
+    .crop-meta {
+      font-size: 0.82rem;
+      color: #475569;
+      font-weight: 600;
+      display: block;
+      margin-top: 0.2rem;
+    }
+    .badge-large {
+      padding: 0.45rem 0.95rem;
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      border-radius: 9999px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.06);
+    }
+    .eta-strip {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 0.55rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #166534;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+
+    /* Stepper V2 */
+    .stepper-box {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.1rem 1.25rem 1.25rem 1.25rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+    }
+    .stepper-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .stepper-section-title {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .stepper-current-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #059669;
+      background: #ecfdf5;
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+    }
+    .transit-stepper-v2 {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      position: relative;
+    }
+    .transit-stepper-v2 .step-point {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 60px;
+      text-align: center;
+      z-index: 2;
+    }
+    .transit-stepper-v2 .step-point .bullet {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #f8fafc;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.82rem;
+      border: 2px solid #cbd5e1;
+      transition: all 0.25s ease;
+      margin-bottom: 0.35rem;
+    }
+    .transit-stepper-v2 .step-point.completed .bullet {
+      background: #10b981 !important;
+      color: #ffffff !important;
+      border-color: #10b981 !important;
+      box-shadow: 0 3px 8px rgba(16, 185, 129, 0.4);
+    }
+    .transit-stepper-v2 .step-point.current .bullet {
+      background: #fef3c7 !important;
+      color: #d97706 !important;
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25);
+      animation: pulseStep 1.6s infinite;
+    }
+    @keyframes pulseStep {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+    .transit-stepper-v2 .step-name {
+      font-size: 0.76rem;
+      font-weight: 800;
+      color: #334155;
+    }
+    .transit-stepper-v2 .step-sub {
+      font-size: 0.68rem;
+      color: #64748b;
+      margin-top: 0.1rem;
+    }
+    .transit-stepper-v2 .step-point.completed .step-name {
+      color: #059669;
+    }
+    .transit-stepper-v2 .step-point.current .step-name {
+      color: #d97706;
+    }
+    .transit-stepper-v2 .step-line {
+      flex: 1;
+      height: 4px;
+      background: #e2e8f0;
+      margin: 14px 0.35rem 0 0.35rem;
+      border-radius: 2px;
+      transition: all 0.35s ease;
+    }
+    .transit-stepper-v2 .step-line.active {
+      background: #10b981 !important;
+      box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+    }
+
+    /* Grid Details */
+    .tracking-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .track-info-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1rem 1.15rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+    }
+    .track-card-head {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.65rem;
+    }
+    .info-row {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.8rem;
+    }
+    .info-lbl {
+      font-size: 0.72rem;
+      color: #64748b;
+      font-weight: 700;
+      margin-bottom: 0.1rem;
+    }
+    .waybill-code {
+      font-family: monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      border: 1px solid #cbd5e1;
+    }
+    .btn-copy-waybill {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #64748b;
+      padding: 0.2rem;
+      font-size: 0.85rem;
+      transition: color 0.15s ease;
+    }
+    .btn-copy-waybill:hover {
+      color: #10b981;
+    }
+    .carrier-phone-link {
+      color: #059669;
+      font-weight: 800;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+    }
+    .carrier-phone-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Route Elements */
+    .route-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.65rem;
+    }
+    .route-marker {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }
+    .origin-marker {
+      background: #ecfdf5;
+      color: #059669;
+      border: 1px solid #a7f3d0;
+    }
+    .dest-marker {
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+    }
+    .route-text {
+      flex: 1;
+      font-size: 0.82rem;
+    }
+    .route-lbl {
+      display: block;
+      font-size: 0.7rem;
+      color: #64748b;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .fulfillment-badge-strip {
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+    .mode-tag {
+      font-weight: 700;
+      color: #475569;
+    }
+
+    /* Modal Footer */
+    .delivery-modal-footer {
+      padding: 0.9rem 1.5rem;
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .footer-help-text {
+      font-size: 0.75rem;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    @media (max-width: 680px) {
+      .delivery-modal { width: 95%; }
+      .delivery-modal-header { padding: 1rem; }
+      .delivery-modal-body { padding: 1rem; }
+      .tracking-grid { grid-template-columns: 1fr; }
+      .transit-stepper-v2 .step-sub { display: none; }
+      .transit-stepper-v2 .step-point { min-width: 48px; }
+      .d-none-mobile { display: none; }
+      .delivery-modal-footer { flex-direction: column; align-items: stretch; text-align: center; }
+      .footer-help-text { justify-content: center; }
+    }
 
     .mt-2 { margin-top: 0.5rem; }
     .mt-3 { margin-top: 0.85rem; }
@@ -1216,6 +1699,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
   downloadMessage = '';
   selectedInvoiceOrder: UIOrderItem | null = null;
   deliveryStatusOrder: UIOrderItem | null = null;
+  isRefreshingStatus = false;
+  copiedTracking = false;
 
   // Farmer Review Modal State (Dealer)
   reviewModalOpen = false;
@@ -1264,19 +1749,17 @@ export class OrderListComponent implements OnInit, OnDestroy {
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', (e: StorageEvent) => {
         if (e.key === 'cropdeal_active_deliveries' || e.key === 'cropdeal_orders_cache') {
-          this.deliveryService.refreshDeliveries();
-          this.orderService.refreshOrders();
           this.syncActiveTrackingModal();
         }
       });
     }
 
-    // Automatically poll every 1.5 seconds to synchronize delivery status updates live
+    // Safe background poll every 8 seconds without recursive subject emissions
     this.statusPollTimer = setInterval(() => {
-      this.deliveryService.refreshDeliveries();
-      this.orderService.refreshOrders();
-      this.syncActiveTrackingModal();
-    }, 1500);
+      if (this.deliveryStatusOrder) {
+        this.deliveryService.getAllDeliveries().subscribe();
+      }
+    }, 8000);
   }
 
   ngOnDestroy(): void {
@@ -1330,14 +1813,22 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   refreshTrackingModal(): void {
     if (!this.deliveryStatusOrder) return;
-    this.deliveryService.refreshDeliveries();
-    this.orderService.refreshOrders();
-    this.syncActiveTrackingModal();
+    this.isRefreshingStatus = true;
+    this.deliveryService.getAllDeliveries().subscribe({
+      next: (dels) => {
+        this.deliveries = dels || [];
+        this.syncActiveTrackingModal();
+        setTimeout(() => { this.isRefreshingStatus = false; }, 350);
+      },
+      error: () => {
+        this.isRefreshingStatus = false;
+      }
+    });
   }
 
   private syncActiveTrackingModal(): void {
     if (this.deliveryStatusOrder) {
-      const allDels = this.deliveryService.refreshDeliveries();
+      const allDels = this.deliveries || [];
       const targetId = String(this.deliveryStatusOrder.id || '').trim();
       const targetNum = String(this.deliveryStatusOrder.orderNumber || '').trim();
       const cleanTargetId = targetId.replace(/^ord-?/i, '');
@@ -1630,7 +2121,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   viewDeliveryStatus(order: UIOrderItem): void {
-    const allDels = this.deliveryService.refreshDeliveries();
+    if (!order) return;
+    const allDels = this.deliveries || [];
     const cleanId = String(order.id || '').trim();
     const orderNum = String(order.orderNumber || '').trim();
     const cleanNum = cleanId.replace(/^ord-?/i, '');
@@ -1655,12 +2147,55 @@ export class OrderListComponent implements OnInit, OnDestroy {
       });
     }
 
+    const orderCopy = { ...order };
     if (del) {
-      order.deliveryInfo = del;
-      const effective = this.getEffectiveStatus(order);
-      order.status = effective as any;
+      orderCopy.deliveryInfo = del;
+      const effective = this.getEffectiveStatus(orderCopy);
+      orderCopy.status = effective as any;
     }
-    this.deliveryStatusOrder = { ...order };
+    this.deliveryStatusOrder = orderCopy;
+  }
+
+  copyTracking(num: string): void {
+    if (!num) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(num).then(() => {
+          this.copiedTracking = true;
+          setTimeout(() => { this.copiedTracking = false; }, 2000);
+        });
+      }
+    } catch {}
+  }
+
+  getTrackingNumber(order: UIOrderItem | null): string {
+    if (!order) return 'TRK-IN-10001';
+    if (order.deliveryInfo?.trackingNumber) return String(order.deliveryInfo.trackingNumber);
+    const idStr = String(order.orderNumber || order.id || '10001');
+    const clean = idStr.replace(/^ord-?/i, '');
+    return 'TRK-IN-' + clean;
+  }
+
+  getCarrierName(order: UIOrderItem | null): string {
+    return order?.deliveryInfo?.partnerName || 'Kisan Express Agro Logistics';
+  }
+
+  getCarrierPhone(order: UIOrderItem | null): string {
+    return order?.deliveryInfo?.partnerPhone || '+91 98888 22110';
+  }
+
+  getVehicleInfo(order: UIOrderItem | null): string {
+    return order?.deliveryInfo?.vehicleNumber ? `Vehicle: ${order.deliveryInfo.vehicleNumber}` : 'GPS Mini-Truck (Tata Ace)';
+  }
+
+  getEstimatedEta(order: UIOrderItem | null): string {
+    if (!order) return 'Estimated Delivery: In Progress';
+    const st = this.getEffectiveStatus(order);
+    if (st === 'DELIVERED') return 'Consignment delivered successfully at destination';
+    if (st === 'IN_TRANSIT') return 'On the road • Estimated delivery today within 2-4 hours';
+    if (st === 'PICKED_UP') return 'Cargo collected • In transit towards warehouse';
+    if (st === 'ASSIGNED') return 'Logistics driver dispatched to farmer pickup point';
+    return 'Order confirmed • Awaiting logistics partner assignment';
   }
 
   // Dynamic Pagination

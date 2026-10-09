@@ -152,12 +152,11 @@ interface BankDetails {
                 <th>Transaction Details & Order Status</th>
                 <th>Status</th>
                 <th>Amount (&#8377;)</th>
-                <th>Escrow Balance (&#8377;)</th>
               </tr>
             </thead>
             <tbody>
               <tr *ngIf="pagedTransactions.length === 0">
-                <td colspan="7" class="text-center py-4 text-muted">No transactions found for selected filter.</td>
+                <td colspan="6" class="text-center py-4 text-muted">No transactions found for selected filter.</td>
               </tr>
               <tr *ngFor="let tx of pagedTransactions">
                 <td><strong>{{ tx.id }}</strong></td>
@@ -192,7 +191,6 @@ interface BankDetails {
                     {{ isCredit(tx.type) ? '+ ' : '- ' }}&#8377; {{ tx.amount | number:'1.2-2' }}
                   </strong>
                 </td>
-                <td><strong>&#8377; {{ tx.balance | number:'1.2-2' }}</strong></td>
               </tr>
             </tbody>
           </table>

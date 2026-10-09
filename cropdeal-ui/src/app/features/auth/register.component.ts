@@ -58,33 +58,28 @@ import { UserRole } from '../../core/models/user.model';
           <div class="form-row">
             <div class="form-group flex-1">
               <label class="form-label">Username</label>
-              <input type="text" [(ngModel)]="username" name="username" class="form-control" placeholder="e.g. kisan_ramesh" required />
+              <input type="text" [(ngModel)]="username" name="username" class="form-control" placeholder="Enter username" autocomplete="off" required />
             </div>
             <div class="form-group flex-1">
               <label class="form-label">Full Name</label>
-              <input type="text" [(ngModel)]="fullName" name="fullName" class="form-control" placeholder="Ramesh Patel" required />
+              <input type="text" [(ngModel)]="fullName" name="fullName" class="form-control" placeholder="Enter full name" autocomplete="off" required />
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group flex-1">
               <label class="form-label">Email Address</label>
-              <input type="email" [(ngModel)]="email" name="email" class="form-control" placeholder="ramesh@example.com" required />
+              <input type="email" [(ngModel)]="email" name="email" class="form-control" placeholder="Enter email address" autocomplete="off" required />
             </div>
             <div class="form-group flex-1">
               <label class="form-label">Mobile Number (10 digits)</label>
-              <input type="tel" [(ngModel)]="phone" name="phone" class="form-control" placeholder="9876543210" maxlength="14" required />
+              <input type="tel" [(ngModel)]="phone" name="phone" class="form-control" placeholder="Enter 10-digit mobile number" maxlength="14" autocomplete="off" required />
             </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Location / Farm Address</label>
-            <input type="text" [(ngModel)]="address" name="address" class="form-control" placeholder="e.g. Village Mandi, Karnal, Haryana" required />
           </div>
 
           <div class="form-group">
             <label class="form-label">Password (Min. 8 characters)</label>
-            <input type="password" [(ngModel)]="password" name="password" minlength="8" class="form-control" placeholder="Minimum 8 characters" required />
+            <input type="password" [(ngModel)]="password" name="password" minlength="8" class="form-control" placeholder="Create password (min. 8 characters)" autocomplete="new-password" required />
           </div>
 
           <button type="submit" class="btn btn-primary btn-block" [disabled]="loading">
@@ -263,7 +258,7 @@ export class RegisterComponent {
       fullName: displayName,
       email: this.email.trim(),
       phone: cleanPhone,
-      address: this.address.trim(),
+      address: '',
       role: this.role,
       password: this.password
     }).subscribe({

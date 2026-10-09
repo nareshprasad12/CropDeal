@@ -121,13 +121,12 @@ type ReportTab = 'payments' | 'dealers' | 'farmers' | 'delivery' | 'crops';
                   <th>Receiver (Farmer)</th>
                   <th>Settlement Amount</th>
                   <th>Payment Method</th>
-                  <th>Escrow Status</th>
                   <th>Timestamp</th>
                 </tr>
               </thead>
               <tbody>
                 <tr *ngIf="payments.length === 0">
-                  <td colspan="7" class="text-center p-4 text-muted" style="text-align: center; padding: 2.5rem; color: #94a3b8;">
+                  <td colspan="6" class="text-center p-4 text-muted" style="text-align: center; padding: 2.5rem; color: #94a3b8;">
                     <i class="fa-solid fa-receipt d-block" style="font-size: 1.8rem; margin-bottom: 0.5rem;"></i>
                     No recorded payment settlements yet.
                   </td>
@@ -138,7 +137,6 @@ type ReportTab = 'payments' | 'dealers' | 'farmers' | 'delivery' | 'crops';
                   <td>{{ p.receiverName }}</td>
                   <td><strong class="text-emerald">₹{{ p.amount | number:'1.2-2' }}</strong></td>
                   <td><span class="badge badge-info">{{ p.paymentMethod }}</span></td>
-                  <td><span class="badge badge-success">{{ p.status }}</span></td>
                   <td>{{ p.createdAt | date:'medium' }}</td>
                 </tr>
               </tbody>

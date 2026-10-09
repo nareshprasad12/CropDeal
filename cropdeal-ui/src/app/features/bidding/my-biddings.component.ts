@@ -9,6 +9,8 @@ import { WalletService } from '../../core/services/wallet.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { OrderService } from '../../core/services/order.service';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { DeliveryService } from '../../core/services/delivery.service';
+import { PaymentService } from '../../core/services/payment.service';
 import { CropService } from '../../core/services/crop.service';
 import { User } from '../../core/models/user.model';
 import { BiddingAuction, BidOffer } from '../../core/models/bidding.model';
@@ -979,6 +981,8 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
     private notificationService: NotificationService,
     private orderService: OrderService,
     private invoiceService: InvoiceService,
+    private deliveryService: DeliveryService,
+    private paymentService: PaymentService,
     private cropService: CropService
   ) {}
 
@@ -1023,8 +1027,9 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
   }
 
   private processAuctions(auctions: BiddingAuction[]): void {
+    const now = Date.now();
     const deleted = this.biddingService.getDeletedAuctionIds();
-    const valid = auctions.filter(a => !deleted.has(String(a.id)));
+    const valid = auctions.filter(a => !deleted.has(String(a.id)) && (!a.endTime || new Date(a.endTime).getTime() > now));
     const uid = this.user?.id || this.user?.userId;
 
     // Dealer: find auctions where dealer is highest bidder or placed a bid
@@ -1175,7 +1180,7 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
     this.biddingService.createAuction({
       ...this.newAuction,
       farmerId: this.user?.id || 'farmer-1',
-      farmerName: this.user?.fullName || 'Sardar Gurpreet Singh',
+      farmerName: this.user?.fullName || this.user?.username || null,
       durationHours: this.auctionDurationHours
     }).subscribe({
       next: (created) => {
@@ -1223,9 +1228,9 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
       pricePerUnit: auction.currentHighestBid,
       totalAmount: fullStockTotal,
       farmerId: farmerUid,
-      farmerName: auction.farmerName || this.user?.fullName || 'Sardar Gurpreet Singh',
+      farmerName: auction.farmerName || this.user?.fullName || null,
       dealerId: dealerUid,
-      dealerName: auction.highestBidderName || 'Apex Agro Mills Ltd',
+      dealerName: auction.highestBidderName || null,
       status: 'DELIVERED',
       orderDate: new Date().toISOString(),
       deliveryAddress: auction.location || 'APMC Yard Mandi Gate 2',
@@ -1240,12 +1245,12 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
       invoiceNumber: 'CD-INV-2026-' + orderId.replace('ORD-', ''),
       orderId: orderId,
       dealerId: dealerUid,
-      dealerName: auction.highestBidderName || 'Apex Agro Mills Ltd',
+      dealerName: auction.highestBidderName || null,
       dealerPhone: '+91 98722 55667',
       dealerAddress: 'Commercial Grain Terminal, Mandi Gate 2, New Delhi',
       dealerGstin: '07AABCC8901Z1Z8',
       farmerId: farmerUid,
-      farmerName: auction.farmerName || this.user?.fullName || 'Sardar Gurpreet Singh',
+      farmerName: auction.farmerName || this.user?.fullName || null,
       farmerPhone: '+91 98140 11223',
       farmerAddress: auction.location || 'APMC Yard Mandi Gate 2',
       farmerPan: 'AABPG7812F',
@@ -1269,6 +1274,35 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
       issuedAt: new Date().toISOString()
     };
     this.invoiceService.createInvoice(invoicePayload).subscribe();
+
+    const numOrderId = parseInt(String(orderId).replace(/\D/g, ''), 10) || 1001;
+    const numDealerId = parseInt(String(dealerUid).replace(/\D/g, ''), 10) || 2;
+    const numFarmerId = parseInt(String(farmerUid).replace(/\D/g, ''), 10) || 1;
+
+    // Persist Payment in PaymentService
+    this.paymentService.makePayment({
+      orderId: numOrderId,
+      dealerId: numDealerId,
+      farmerId: numFarmerId,
+      amount: fullStockTotal,
+      paymentMethod: 'WALLET'
+    }).subscribe();
+
+    // Persist Delivery in DeliveryService
+    this.deliveryService.createDelivery({
+      orderId: orderId,
+      dealerId: String(dealerUid),
+      farmerId: String(farmerUid),
+      cropName: auction.cropName || null,
+      cropQuantity: auction.quantity || null,
+      cropUnit: auction.unit || 'Kg',
+      farmerName: auction.farmerName || null,
+      dealerName: auction.highestBidderName || null,
+      fulfillmentType: 'SELF_PICKUP',
+      pickupAddress: auction.location || null,
+      dropAddress: 'Dealer Mandi Facility',
+      status: 'DELIVERED'
+    }).subscribe();
 
     // 5. If this auction was created from a Crop in CropService, update or delete it
     if (auction.cropId) {

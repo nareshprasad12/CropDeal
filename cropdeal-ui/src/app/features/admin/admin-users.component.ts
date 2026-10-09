@@ -412,10 +412,10 @@ export class AdminUsersComponent implements OnInit {
     const role = (u.role || '').toUpperCase();
     if (role === 'ADMIN') return true;
     const username = (u.username || '').toLowerCase();
-    if (username === 'admin') return true;
-    if (String(u.id) === '1' || String(u.userId) === '1') return true;
+    if (username.includes('admin')) return true;
+    if (String(u.id) === '4' || String(u.userId) === '4') return true;
     const current = this.authService.currentUserValue;
-    if (current && (current.role === 'ADMIN' || current.username?.toLowerCase() === 'admin')) {
+    if (current && (current.role === 'ADMIN' || current.username?.toLowerCase().includes('admin'))) {
       if (String(current.id) === String(u.id) || String(current.userId) === String(u.userId)) return true;
       if (current.email && u.email && current.email.toLowerCase() === u.email.toLowerCase()) return true;
       if (current.username && u.username && current.username.toLowerCase() === u.username.toLowerCase()) return true;
@@ -443,16 +443,16 @@ export class AdminUsersComponent implements OnInit {
             const uid = String(u.userId || u.id);
             const existing = userMap.get(uid);
             const rawRole = String(u.role || (existing ? existing.role : '') || '').toUpperCase().replace(/^ROLE_/, '');
-            const isAdm = (rawRole === 'ADMIN' || uid === '1' || (u.username && u.username.toLowerCase() === 'admin') || (u.email && u.email.toLowerCase().includes('admin@')));
-            const cleanRole = isAdm ? 'ADMIN' : (rawRole || 'FARMER');
+            const isAdm = (rawRole === 'ADMIN' || uid === '4' || (u.username && u.username.toLowerCase().includes('admin')) || (u.email && u.email.toLowerCase().includes('admin@')));
+            const cleanRole = isAdm ? 'ADMIN' : (rawRole || (existing ? existing.role : 'FARMER'));
             const isBlocked = isAdm ? false : (u.status === 'BLOCKED' || !!u.isBlocked);
 
             userMap.set(uid, {
               id: uid,
               userId: uid,
-              username: u.username || (isAdm ? 'admin' : (existing ? existing.username : (u.name ? u.name.toLowerCase().replace(/[\s\W]+/g, '_') : 'user_' + uid))),
+              username: u.username || (isAdm ? 'admin@gmail.com' : (existing ? existing.username : (u.name ? u.name.toLowerCase().replace(/[\s\W]+/g, '_') : 'user_' + uid))),
               fullName: u.name || u.fullName || (isAdm ? 'System Administrator' : (existing ? existing.fullName : 'Market User')),
-              email: u.email || (isAdm ? 'admin@cropdeal.com' : (existing ? existing.email : `${uid}@cropdeal.in`)),
+              email: u.email || (isAdm ? 'admin@gmail.com' : (existing ? existing.email : `${uid}@cropdeal.in`)),
               phone: u.phone || (existing ? existing.phone : '+91 98765 00000'),
               role: cleanRole as any,
               address: u.address || (isAdm ? 'CropDeal Headquarters, Tech Park' : (existing ? existing.address : 'Market Trading Zone')),
@@ -465,14 +465,14 @@ export class AdminUsersComponent implements OnInit {
           });
         }
 
-        // Ensure Administrator (#1) is ALWAYS accurately present with role ADMIN
-        if (!userMap.has('1') && (this.roleFilter === 'ALL' || this.roleFilter === 'ADMIN')) {
-          userMap.set('1', {
-            id: '1',
-            userId: '1',
-            username: 'admin',
+        // Ensure Administrator (#4) is ALWAYS accurately present with role ADMIN
+        if (!userMap.has('4') && (this.roleFilter === 'ALL' || this.roleFilter === 'ADMIN')) {
+          userMap.set('4', {
+            id: '4',
+            userId: '4',
+            username: 'admin@gmail.com',
             fullName: 'System Administrator',
-            email: 'admin@cropdeal.com',
+            email: 'admin@gmail.com',
             phone: '+91 99999 99999',
             role: 'ADMIN',
             address: 'CropDeal Headquarters, Tech Park',
@@ -521,7 +521,7 @@ export class AdminUsersComponent implements OnInit {
         u.username.toLowerCase().includes(q) ||
         (u.fullName && u.fullName.toLowerCase().includes(q)) ||
         (u.phone && u.phone.includes(q)) ||
-        u.email.toLowerCase().includes(q) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
         u.role.toLowerCase().includes(q);
       return matchRole && matchQuery;
     });
@@ -573,7 +573,8 @@ export class AdminUsersComponent implements OnInit {
           String(x.id) === String(u.id) ||
           String(x.userId) === String(u.userId) ||
           (x.email && u.email && x.email.toLowerCase() === u.email.toLowerCase()) ||
-          (x.username && u.username && x.username.toLowerCase() === u.username.toLowerCase())
+          (x.username && u.username && x.username.toLowerCase() === u.username.toLowerCase()) ||
+          (x.role && u.role && x.role.toUpperCase() === u.role.toUpperCase())
         );
         if (idx >= 0) {
           list[idx].status = u.status;

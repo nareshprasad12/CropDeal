@@ -9,6 +9,8 @@ import { WalletService } from '../../core/services/wallet.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { OrderService } from '../../core/services/order.service';
 import { InvoiceService } from '../../core/services/invoice.service';
+import { DeliveryService } from '../../core/services/delivery.service';
+import { PaymentService } from '../../core/services/payment.service';
 import { CropService } from '../../core/services/crop.service';
 import { User } from '../../core/models/user.model';
 import { BiddingAuction, BidOffer } from '../../core/models/bidding.model';
@@ -264,7 +266,7 @@ interface AuctionItem {
                   <i class="fa-regular fa-user"></i>
                 </div>
                 <div class="farmer-names">
-                  <strong>{{ item.farmerName }}</strong>
+                  <strong>{{ item.farmerName !== null && item.farmerName !== undefined ? item.farmerName : 'null' }}</strong>
                   <span>Farmer</span>
                 </div>
               </div>
@@ -453,16 +455,17 @@ interface AuctionItem {
                 <button
                   class="btn-submit-auction-bid mt-3"
                   (click)="submitBidOnAuction()"
-                  [disabled]="dealerWalletBalance < calculatedTotalAmount || (userBidPrice || 0) <= selectedAuction.currentBidKg || user?.role !== 'DEALER'">
+                  [disabled]="dealerWalletBalance < calculatedTotalAmount || !isBidAmountValid() || user?.role !== 'DEALER'">
                   <i class="fa-solid fa-gavel"></i>
-                  <ng-container *ngIf="(userBidPrice || 0) <= selectedAuction.currentBidKg">
-                    Bid Must Be Higher Than ₹{{ selectedAuction.currentBidKg | number:'1.2-2' }}/Kg
+                  <ng-container *ngIf="!isBidAmountValid()">
+                    <span *ngIf="selectedAuction.bidsCount === 0">Bid Must Be Equal to or Higher Than ₹{{ selectedAuction.startingPriceKg | number:'1.2-2' }}/Kg</span>
+                    <span *ngIf="selectedAuction.bidsCount > 0">Bid Must Be Higher Than ₹{{ selectedAuction.currentBidKg | number:'1.2-2' }}/Kg</span>
                   </ng-container>
-                  <ng-container *ngIf="(userBidPrice || 0) > selectedAuction.currentBidKg && dealerWalletBalance < calculatedTotalAmount">
+                  <ng-container *ngIf="isBidAmountValid() && dealerWalletBalance < calculatedTotalAmount">
                     Insufficient Wallet Balance to Bid
                   </ng-container>
-                  <ng-container *ngIf="(userBidPrice || 0) > selectedAuction.currentBidKg && dealerWalletBalance >= calculatedTotalAmount">
-                    Place Highest Bid of ₹{{ userBidPrice | number:'1.2-2' }}/Kg with Wallet
+                  <ng-container *ngIf="isBidAmountValid() && dealerWalletBalance >= calculatedTotalAmount">
+                    Place Bid of ₹{{ userBidPrice | number:'1.2-2' }}/Kg with Wallet
                   </ng-container>
                 </button>
               </div>
@@ -479,7 +482,7 @@ interface AuctionItem {
                   </div>
                   <div class="farmer-profile-info">
                     <div class="f-name-row">
-                      <strong>{{ selectedAuction.farmerName }}</strong>
+                      <strong>{{ selectedAuction.farmerName !== null && selectedAuction.farmerName !== undefined ? selectedAuction.farmerName : 'null' }}</strong>
                       <span class="verified-tag">✓ Verified Farmer</span>
                     </div>
                     <span class="f-sub">Producer</span>
@@ -490,8 +493,8 @@ interface AuctionItem {
                 </div>
 
                 <div class="farmer-contact-list mt-2">
-                  <div><i class="fa-solid fa-location-dot"></i> {{ selectedAuction.location }}</div>
-                  <div><i class="fa-solid fa-phone"></i> {{ selectedAuction.farmerPhone }}</div>
+                  <div><i class="fa-solid fa-location-dot"></i> {{ selectedAuction.location !== null && selectedAuction.location !== undefined ? selectedAuction.location : 'null' }}</div>
+                  <div><i class="fa-solid fa-phone"></i> {{ selectedAuction.farmerPhone !== null && selectedAuction.farmerPhone !== undefined ? selectedAuction.farmerPhone : 'null' }}</div>
                 </div>
               </div>
 
@@ -504,9 +507,9 @@ interface AuctionItem {
                   <div class="kv-line"><span class="k">End Time</span><span class="v">29 Sep 2026, 01:00 PM</span></div>
                   <div class="kv-line"><span class="k">Total Quantity</span><span class="v">{{ selectedAuction.totalQuantityKg }} Kg</span></div>
                   <div class="kv-line"><span class="k">Commodity</span><span class="v">{{ selectedAuction.cropName }}</span></div>
-                  <div class="kv-line"><span class="k">Variety</span><span class="v">{{ selectedAuction.variety }}</span></div>
-                  <div class="kv-line"><span class="k">Grade</span><span class="v">{{ selectedAuction.grade }}</span></div>
-                  <div class="kv-line"><span class="k">State</span><span class="v">{{ selectedAuction.state }}</span></div>
+                  <div class="kv-line"><span class="k">Variety</span><span class="v">{{ selectedAuction.variety !== null && selectedAuction.variety !== undefined ? selectedAuction.variety : 'null' }}</span></div>
+                  <div class="kv-line"><span class="k">Grade</span><span class="v">{{ selectedAuction.grade !== null && selectedAuction.grade !== undefined ? selectedAuction.grade : 'null' }}</span></div>
+                  <div class="kv-line"><span class="k">State</span><span class="v">{{ selectedAuction.state !== null && selectedAuction.state !== undefined ? selectedAuction.state : 'null' }}</span></div>
                 </div>
               </div>
 
@@ -1129,6 +1132,8 @@ export class BiddingComponent implements OnInit, OnDestroy {
     private notificationService: NotificationService,
     private orderService: OrderService,
     private invoiceService: InvoiceService,
+    private deliveryService: DeliveryService,
+    private paymentService: PaymentService,
     private cropService: CropService,
     private route: ActivatedRoute
   ) {}
@@ -1198,6 +1203,7 @@ export class BiddingComponent implements OnInit, OnDestroy {
         const end = new Date(item.endTime).getTime();
         const diff = end - now;
         if (diff <= 0) {
+          item.status = 'CLOSED';
           item.timeRemaining = '00 : 00 : 00';
           item.isEndingSoon = true;
         } else {
@@ -1213,36 +1219,41 @@ export class BiddingComponent implements OnInit, OnDestroy {
   }
 
   private mapServerAuctionToItem(sa: any): AuctionItem {
-    const startingPrice = sa.startingPrice || sa.startingBid || 20;
-    const currentBid = sa.currentHighestBid || sa.currentBid || startingPrice;
+    const startingPrice = Number(sa.startingPrice || sa.startingBid || sa.basePrice || 20);
+    const highestServerBid = sa.highestBidAmount != null ? Number(sa.highestBidAmount) : null;
+    const currentBid = (highestServerBid && highestServerBid > 0) ? highestServerBid : Number(sa.currentHighestBid || sa.currentBid || startingPrice);
     const endTime = sa.endTime || new Date(Date.now() + 8.5 * 3600000).toISOString();
+    const serverBids = Array.isArray(sa.bids) ? sa.bids : [];
+    const count = serverBids.length > 0 ? serverBids.length : (sa.bidsCount || sa.totalBids || 0);
+
     return {
-      id: sa.id,
+      id: String(sa.id),
       cropName: sa.cropName || 'Fresh Harvest Crop',
-      variety: sa.variety || 'Grade A Produce',
-      grade: sa.grade || 'A Grade',
+      variety: sa.variety || null,
+      grade: sa.grade || null,
       image: sa.imageUrl || resolveCropImage(sa.cropName),
-      location: sa.location || 'Local Mandi APMC',
-      district: sa.district || 'Ludhiana',
-      state: sa.state || 'Punjab',
+      location: sa.location || null,
+      district: sa.district || null,
+      state: sa.state || null,
       startingPriceKg: startingPrice,
       currentBidKg: currentBid,
-      totalQuantityKg: sa.quantity || 1000,
-      farmerName: sa.farmerName || 'Verified Farmer',
-      farmerPhone: sa.farmerPhone || '+91 98765 43210',
+      totalQuantityKg: Number(sa.quantity || 1000),
+      farmerName: sa.farmerName !== undefined ? sa.farmerName : null,
+      farmerPhone: sa.farmerPhone !== undefined ? sa.farmerPhone : null,
       farmerRating: 4.8,
       farmerReviewsCount: 15,
-      farmerId: sa.farmerId || 'farmer-1',
-      bidsCount: sa.bids ? sa.bids.length : (sa.totalBids || 0),
+      farmerId: String(sa.farmerId || '1'),
+      bidsCount: count,
       timeRemaining: '08 : 30 : 00',
       isEndingSoon: false,
       status: (sa.status as any) || 'OPEN',
       endTime: endTime,
-      bidsHistory: (sa.bids || []).map((b: any) => ({
-        bidderName: b.bidderName || 'Dealer',
-        bidPriceKg: b.bidAmount,
-        bidTime: 'Recent'
-      }))
+      bidsHistory: serverBids.length > 0 ? serverBids.map((b: any) => ({
+        dealerId: b.dealerId ? String(b.dealerId) : undefined,
+        bidderName: b.dealerName || b.bidderName || ('Dealer #' + b.dealerId),
+        bidPriceKg: Number(b.bidAmount),
+        bidTime: b.bidTime || 'Recent'
+      })) : (sa.bidsHistory || [])
     };
   }
 
@@ -1257,18 +1268,30 @@ export class BiddingComponent implements OnInit, OnDestroy {
     );
   }
 
+  isTimingCompleted(a: AuctionItem): boolean {
+    if (a.status === 'CLOSED' || (a.status as any) === 'COMPLETED' || (a.status as any) === 'AWARDED') return true;
+    if (a.endTime) {
+      return new Date(a.endTime).getTime() <= Date.now();
+    }
+    return false;
+  }
+
   get filteredAuctions(): AuctionItem[] {
     return this.auctions.filter(a => {
+      // Exclude auctions whose timing has completed
+      if (this.isTimingCompleted(a)) {
+        return false;
+      }
       if (this.isMyBiddingsMode && this.user?.role === 'FARMER' && !this.isMyAuction(a)) {
         return false;
       }
-      const stateMatch = this.filterState === 'All' || a.state.toLowerCase() === this.filterState.toLowerCase();
-      const distMatch = this.filterDistrict === 'All' || a.district.toLowerCase() === this.filterDistrict.toLowerCase();
-      const commMatch = this.filterCommodity === 'All' || a.cropName.toLowerCase().includes(this.filterCommodity.toLowerCase());
+      const stateMatch = this.filterState === 'All' || (a.state && a.state.toLowerCase() === this.filterState.toLowerCase());
+      const distMatch = this.filterDistrict === 'All' || (a.district && a.district.toLowerCase() === this.filterDistrict.toLowerCase());
+      const commMatch = this.filterCommodity === 'All' || (a.cropName && a.cropName.toLowerCase().includes(this.filterCommodity.toLowerCase()));
       const searchMatch = !this.searchQuery.trim() ||
-        a.cropName.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-        a.variety.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-        a.farmerName.toLowerCase().includes(this.searchQuery.toLowerCase());
+        (a.cropName && a.cropName.toLowerCase().includes(this.searchQuery.toLowerCase())) ||
+        (a.variety && a.variety.toLowerCase().includes(this.searchQuery.toLowerCase())) ||
+        (a.farmerName && a.farmerName.toLowerCase().includes(this.searchQuery.toLowerCase()));
       return stateMatch && distMatch && commMatch && searchMatch;
     });
   }
@@ -1296,16 +1319,18 @@ export class BiddingComponent implements OnInit, OnDestroy {
   }
 
   closeBid(item: AuctionItem): void {
-    const highestBidder = item.bidsHistory.length > 0 ? item.bidsHistory[0].bidderName : 'Apex Agro Mills Ltd (Dealer)';
+    const highestBidder = item.bidsHistory.length > 0 ? item.bidsHistory[0].bidderName : (item.farmerName || null);
     const highestBid = item.currentBidKg;
     const fullStockTotal = highestBid * item.totalQuantityKg;
 
-    if (confirm(`Close Bidding Floor: Sell "${item.cropName}" (${item.totalQuantityKg} kg) to highest bidder ${highestBidder} at ₹${highestBid}/kg?\n\nTotal Full Stock Valuation: ₹${fullStockTotal.toLocaleString()}.\n\nThis will debit the dealer's digital wallet, credit your wallet, and finalize the order.`)) {
+    if (confirm(`Close Bidding Floor: Sell "${item.cropName}" (${item.totalQuantityKg} kg) to highest bidder ${highestBidder || 'winner'} at ₹${highestBid}/kg?\n\nTotal Full Stock Valuation: ₹${fullStockTotal.toLocaleString()}.\n\nThis will debit the dealer's digital wallet, credit your wallet, and finalize the order.`)) {
       item.status = 'CLOSED';
-      this.toastMsg = `✓ Success! "${item.cropName}" awarded and sold to ${highestBidder} at ₹${highestBid}/kg! ₹${fullStockTotal.toLocaleString()} credited to your wallet.`;
+      this.toastMsg = `✓ Success! "${item.cropName}" awarded and sold to ${highestBidder || 'winner'} at ₹${highestBid}/kg! ₹${fullStockTotal.toLocaleString()} credited to your wallet.`;
 
-      const dealerUid = 'dealer-1';
-      const farmerUid = item.farmerId || this.user?.id || 'farmer-1';
+      const dealerUid = (item.bidsHistory.length > 0 && (item.bidsHistory[0] as any).dealerId)
+        ? String((item.bidsHistory[0] as any).dealerId)
+        : (this.user?.role === 'DEALER' ? String(this.user.id || this.user.userId || '2') : '2');
+      const farmerUid = item.farmerId || this.user?.id || '1';
       const orderId = 'ORD-' + Math.floor(10000 + Math.random() * 90000);
 
       // 1. Debit Dealer's Wallet
@@ -1319,7 +1344,7 @@ export class BiddingComponent implements OnInit, OnDestroy {
       this.walletService.creditWallet(
         farmerUid,
         fullStockTotal,
-        `Received Bidding Proceeds for Lot #${item.id}: ${item.cropName} (${item.totalQuantityKg} Kg) from ${highestBidder}`
+        `Received Bidding Proceeds for Lot #${item.id}: ${item.cropName} (${item.totalQuantityKg} Kg) from ${highestBidder || 'Dealer'}`
       ).subscribe();
 
       // 3. Register Order in OrderService as completed bidding lot
@@ -1331,9 +1356,9 @@ export class BiddingComponent implements OnInit, OnDestroy {
         pricePerUnit: highestBid,
         totalAmount: fullStockTotal,
         farmerId: farmerUid,
-        farmerName: item.farmerName || this.user?.fullName || 'Sardar Gurpreet Singh',
+        farmerName: item.farmerName || null,
         dealerId: dealerUid,
-        dealerName: highestBidder,
+        dealerName: highestBidder || null,
         status: 'DELIVERED',
         orderDate: new Date().toISOString(),
         deliveryAddress: item.location || 'APMC Yard Mandi Gate 2',
@@ -1377,6 +1402,35 @@ export class BiddingComponent implements OnInit, OnDestroy {
         issuedAt: new Date().toISOString()
       };
       this.invoiceService.createInvoice(invoicePayload).subscribe();
+
+      const numOrderId = parseInt(String(orderId).replace(/\D/g, ''), 10) || 1001;
+      const numDealerId = parseInt(String(dealerUid).replace(/\D/g, ''), 10) || 2;
+      const numFarmerId = parseInt(String(farmerUid).replace(/\D/g, ''), 10) || 1;
+
+      // Persist Payment in PaymentService
+      this.paymentService.makePayment({
+        orderId: numOrderId,
+        dealerId: numDealerId,
+        farmerId: numFarmerId,
+        amount: fullStockTotal,
+        paymentMethod: 'WALLET'
+      }).subscribe();
+
+      // Persist Delivery in DeliveryService
+      this.deliveryService.createDelivery({
+        orderId: orderId,
+        dealerId: String(dealerUid),
+        farmerId: String(farmerUid),
+        cropName: item.cropName || null,
+        cropQuantity: item.totalQuantityKg || null,
+        cropUnit: 'Kg',
+        farmerName: item.farmerName || null,
+        dealerName: highestBidder || null,
+        fulfillmentType: 'SELF_PICKUP',
+        pickupAddress: item.location || null,
+        dropAddress: 'Dealer Mandi Facility',
+        status: 'DELIVERED'
+      }).subscribe();
 
       // 5. Close and delete auction in BiddingService so it is removed from live bidding floor
       this.biddingService.closeAuction(item.id, orderId, fullStockTotal).subscribe();
@@ -1441,8 +1495,16 @@ export class BiddingComponent implements OnInit, OnDestroy {
     const uid = String(this.user.id || this.user.userId || 'dealer-1');
     this.dealerWalletBalance = this.walletService.getStoredBalance(uid);
     this.selectedAuction = item;
-    this.userBidPrice = +(item.currentBidKg + 0.5).toFixed(2);
+    this.userBidPrice = item.bidsCount === 0 ? item.startingPriceKg : +(item.currentBidKg + 0.5).toFixed(2);
     this.onBidPriceChange();
+  }
+
+  isBidAmountValid(): boolean {
+    if (!this.selectedAuction || this.userBidPrice == null) return false;
+    if (this.selectedAuction.bidsCount === 0) {
+      return this.userBidPrice >= this.selectedAuction.startingPriceKg;
+    }
+    return this.userBidPrice > this.selectedAuction.currentBidKg;
   }
 
   toggleFavorite(item: AuctionItem): void {
@@ -1473,7 +1535,17 @@ export class BiddingComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (!this.userBidPrice || this.userBidPrice <= this.selectedAuction.currentBidKg) {
+    if (!this.userBidPrice) {
+      alert('Please enter a valid bid amount.');
+      return;
+    }
+
+    if (this.selectedAuction.bidsCount === 0 && this.userBidPrice < this.selectedAuction.startingPriceKg) {
+      alert(`Your bid must be equal to or higher than the starting price of ₹${this.selectedAuction.startingPriceKg}/Kg.`);
+      return;
+    }
+
+    if (this.selectedAuction.bidsCount > 0 && this.userBidPrice <= this.selectedAuction.currentBidKg) {
       alert(`Your bid must be higher than current highest bid of ₹${this.selectedAuction.currentBidKg}/Kg.`);
       return;
     }
@@ -1488,12 +1560,23 @@ export class BiddingComponent implements OnInit, OnDestroy {
 
     const bidder = this.user?.fullName || this.user?.username || 'Apex Agro Mills Ltd';
     this.selectedAuction.currentBidKg = this.userBidPrice;
-    this.selectedAuction.bidsCount++;
+    this.selectedAuction.bidsCount = (this.selectedAuction.bidsCount || 0) + 1;
     this.selectedAuction.bidsHistory.unshift({
       bidderName: bidder,
       bidPriceKg: this.userBidPrice,
       bidTime: 'Just now'
     });
+
+    const found = this.auctions.find(a => a.id === this.selectedAuction!.id);
+    if (found) {
+      found.currentBidKg = this.userBidPrice;
+      found.bidsCount = (found.bidsCount || 0) + 1;
+      found.bidsHistory.unshift({
+        bidderName: bidder,
+        bidPriceKg: this.userBidPrice,
+        bidTime: 'Just now'
+      });
+    }
 
     const closedAuction = this.selectedAuction;
     const bidAmount = this.userBidPrice;
@@ -1507,7 +1590,19 @@ export class BiddingComponent implements OnInit, OnDestroy {
       bidAmount: bidAmount,
       bidTime: new Date().toISOString()
     };
-    this.biddingService.placeBid(offer).subscribe();
+    this.biddingService.placeBid(offer).subscribe({
+      next: () => {
+        this.biddingService.getActiveAuctions().subscribe(res => {
+          if (res) {
+            const deletedIds = this.biddingService.getDeletedAuctionIds();
+            this.auctions = res
+              .filter(a => !deletedIds.has(String(a.id)) && (a.status === 'OPEN' || !a.status))
+              .map(sa => this.mapServerAuctionToItem(sa));
+            this.updateCountdowns();
+          }
+        });
+      }
+    });
 
     // Send notifications to Farmer and Dealer
     const farmerId = closedAuction.farmerId || 'farmer-1';

@@ -1,7 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { Router, RouterModule, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { CropService } from '../../core/services/crop.service';
 import { NotificationService } from '../../core/services/notification.service';
@@ -44,6 +44,7 @@ import { NotificationService } from '../../core/services/notification.service';
                 name="username"
                 class="form-control"
                 placeholder="Enter your username or email"
+                autocomplete="off"
                 required
               />
             </div>
@@ -62,6 +63,7 @@ import { NotificationService } from '../../core/services/notification.service';
                 name="password"
                 class="form-control"
                 placeholder="Enter your secret password"
+                autocomplete="new-password"
                 required
               />
               <button type="button" class="eye-btn" (click)="showPassword = !showPassword">
@@ -90,10 +92,10 @@ import { NotificationService } from '../../core/services/notification.service';
         <div class="demo-helpers">
           <span class="helper-title">Quick Demo Login:</span>
           <div class="helper-chips">
-            <button type="button" (click)="fillDemo('farmer', 'farmer123', 'FARMER')">🌾 Farmer</button>
-            <button type="button" (click)="fillDemo('dealer', 'dealer123', 'DEALER')">💼 Dealer</button>
-            <button type="button" (click)="fillDemo('delivery_partner', 'partner123', 'DELIVERY_PARTNER')">🚚 Delivery Partner</button>
-            <button type="button" (click)="fillDemo('admin', 'admin123', 'ADMIN')">🛡️ Admin</button>
+            <button type="button" (click)="fillDemo('farmer@gmail.com', 'pass-farmer124', 'FARMER')">🌾 Farmer</button>
+            <button type="button" (click)="fillDemo('dealer@gmail.com', 'pass-dealer124', 'DEALER')">💼 Dealer</button>
+            <button type="button" (click)="fillDemo('delivery@gmail.com', 'pass-delivery124', 'DELIVERY_PARTNER')">🚚 Delivery Partner</button>
+            <button type="button" (click)="fillDemo('admin@gmail.com', 'pass-admin124', 'ADMIN')">🛡️ Admin</button>
           </div>
         </div>
 
@@ -120,7 +122,7 @@ import { NotificationService } from '../../core/services/notification.service';
               <label class="form-label">Registered Email</label>
               <div class="input-wrapper">
                 <i class="fa-regular fa-envelope input-icon"></i>
-                <input type="email" [(ngModel)]="resetEmail" class="form-control" placeholder="user@example.com" />
+                <input type="email" [(ngModel)]="resetEmail" class="form-control" placeholder="Enter your registered email address" autocomplete="off" />
               </div>
               <button class="btn btn-primary mt-3 btn-block" (click)="sendOtp()" [disabled]="sendingOtp || !resetEmail">
                 <span *ngIf="!sendingOtp"><i class="fa-solid fa-paper-plane"></i> Send OTP Code</span>
@@ -137,7 +139,7 @@ import { NotificationService } from '../../core/services/notification.service';
                 <label class="form-label">Enter 6-Digit OTP</label>
                 <div class="input-wrapper">
                   <i class="fa-solid fa-shield-halved input-icon"></i>
-                  <input type="text" [(ngModel)]="otpCode" class="form-control" placeholder="Enter 6-digit code" maxlength="6" />
+                  <input type="text" [(ngModel)]="otpCode" class="form-control" placeholder="Enter 6-digit OTP sent to your email" maxlength="6" autocomplete="off" />
                 </div>
               </div>
               <div class="d-flex justify-content-between align-center mt-2">
@@ -159,18 +161,18 @@ import { NotificationService } from '../../core/services/notification.service';
                 <label class="form-label">New Password</label>
                 <div class="input-wrapper">
                   <i class="fa-solid fa-lock input-icon"></i>
-                  <input type="password" [(ngModel)]="newPassword" class="form-control" placeholder="Min 6 characters" />
+                  <input type="password" [(ngModel)]="newPassword" class="form-control" placeholder="Enter new password (min. 6 characters)" autocomplete="new-password" />
                 </div>
               </div>
               <div class="form-group mt-2">
                 <label class="form-label">Confirm New Password</label>
                 <div class="input-wrapper">
                   <i class="fa-solid fa-lock-open input-icon"></i>
-                  <input type="password" [(ngModel)]="confirmPassword" class="form-control" placeholder="Re-enter password" />
+                  <input type="password" [(ngModel)]="confirmPassword" class="form-control" placeholder="Re-enter your new password" autocomplete="new-password" />
                 </div>
               </div>
               <button class="btn btn-primary mt-3 btn-block" (click)="submitResetPassword()" [disabled]="resetting || !newPassword">
-                <span *ngIf="!resetting"><i class="fa-solid fa-key"></i> Update Password & Login</span>
+                <span *ngIf="!resetting"><i class="fa-solid fa-key"></i> Update Password & Sign In</span>
                 <span *ngIf="resetting"><i class="fa-solid fa-spinner fa-spin"></i> Updating...</span>
               </button>
             </div>
@@ -392,7 +394,7 @@ import { NotificationService } from '../../core/services/notification.service';
     .mt-3 { margin-top: 0.85rem; }
   `]
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   username = '';
   password = '';
   showPassword = false;
@@ -416,8 +418,17 @@ export class LoginComponent {
     private authService: AuthService,
     private cropService: CropService,
     private notificationService: NotificationService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {}
+
+  ngOnInit(): void {
+    this.route.queryParams.subscribe(params => {
+      if (params['blocked'] === 'true') {
+        this.errorMessage = '🚫 Access Denied: User account is blocked by administrator. Please contact support.';
+      }
+    });
+  }
 
   onLogin(): void {
     if (!this.username || !this.password) {
@@ -473,7 +484,7 @@ export class LoginComponent {
             error: () => {}
           });
         }
-        this.router.navigate(['/']);
+        this.router.navigate(['/dashboard']);
       },
       error: (err) => {
         this.loading = false;
@@ -497,10 +508,11 @@ export class LoginComponent {
         if (Array.isArray(list)) {
           const match = list.find((item: any) =>
             (item.username && item.username.toLowerCase() === u.toLowerCase()) ||
-            (item.email && item.email.toLowerCase() === (u.toLowerCase() + '@cropdeal.in'))
+            (item.email && item.email.toLowerCase() === u.toLowerCase()) ||
+            (item.role && item.role.toUpperCase() === role.toUpperCase())
           );
           if (role !== 'ADMIN' && u.toLowerCase() !== 'admin' && match && (match.status === 'BLOCKED' || match.isBlocked)) {
-            this.errorMessage = `🚫 Access Denied: ${role} account is blocked by administrator. Please contact support.`;
+            this.errorMessage = `🚫 Access Denied: User account (${role}) is blocked by administrator. Please contact support.`;
             return;
           }
         }
@@ -515,7 +527,7 @@ export class LoginComponent {
         next: () => {},
         error: () => {}
       });
-      this.router.navigate(['/']);
+      this.router.navigate(['/dashboard']);
     } catch (e: any) {
       const msg = e?.message || '';
       if (msg.toLowerCase().includes('block')) {
@@ -531,7 +543,7 @@ export class LoginComponent {
     if (res.success) {
       this.successMessage = `Welcome, ${res.user?.fullName || 'Verified User'}! Signed in with Facebook.`;
       setTimeout(() => {
-        this.router.navigate(['/']);
+        this.router.navigate(['/dashboard']);
       }, 500);
     } else if (res.error && res.error !== 'Cancelled') {
       this.errorMessage = res.error;
@@ -542,50 +554,67 @@ export class LoginComponent {
     this.showForgotModal = true;
     this.forgotStep = 1;
     this.otpSent = false;
-    this.resetEmail = this.username && this.username.includes('@') ? this.username : '';
+    this.resetEmail = '';
     this.otpCode = '';
     this.newPassword = '';
     this.confirmPassword = '';
+    this.errorMessage = '';
+    this.successMessage = '';
   }
 
   closeForgotModal(): void {
     this.showForgotModal = false;
+    this.resetEmail = '';
+    this.otpCode = '';
+    this.newPassword = '';
+    this.confirmPassword = '';
+    this.forgotStep = 1;
   }
 
   sendOtp(): void {
-    if (!this.resetEmail.trim()) return;
+    if (!this.resetEmail.trim()) {
+      this.errorMessage = 'Please enter your registered email address.';
+      return;
+    }
     this.sendingOtp = true;
     this.errorMessage = '';
+    this.successMessage = '';
     this.authService.sendPasswordResetOtp(this.resetEmail.trim()).subscribe({
       next: () => {
         this.sendingOtp = false;
         this.forgotStep = 2;
-        this.successMessage = 'OTP code dispatched to ' + this.resetEmail;
+        this.otpCode = '';
+        this.successMessage = 'A 6-digit verification OTP has been sent to ' + this.resetEmail.trim() + '. Please check your email inbox.';
       },
-      error: () => {
+      error: (err: any) => {
         this.sendingOtp = false;
-        this.forgotStep = 2;
-        this.successMessage = 'OTP sent! Please check your email inbox.';
+        this.errorMessage = err.error?.message || err.message || 'Failed to send OTP. Please verify your registered email address.';
       }
     });
   }
 
   verifyOtp(): void {
-    if (!this.otpCode.trim()) return;
+    if (!this.otpCode.trim()) {
+      this.errorMessage = 'Please enter the 6-digit OTP code.';
+      return;
+    }
     this.verifyingOtp = true;
+    this.errorMessage = '';
     this.authService.verifyResetOtp(this.resetEmail.trim(), this.otpCode.trim()).subscribe({
       next: (isValid) => {
         this.verifyingOtp = false;
         if (isValid) {
           this.forgotStep = 3;
-          this.successMessage = 'OTP verified! Enter your new password.';
+          this.newPassword = '';
+          this.confirmPassword = '';
+          this.successMessage = 'OTP verified successfully! Please enter your new password.';
         } else {
-          this.errorMessage = 'Invalid OTP code. Please check and try again.';
+          this.errorMessage = 'Invalid OTP code. Please enter the OTP sent to your email.';
         }
       },
-      error: () => {
+      error: (err: any) => {
         this.verifyingOtp = false;
-        this.errorMessage = 'OTP verification failed. Please try again.';
+        this.errorMessage = err.error?.message || err.message || 'Invalid or expired OTP. Please check the code sent to your email.';
       }
     });
   }
@@ -600,20 +629,23 @@ export class LoginComponent {
       return;
     }
     this.resetting = true;
+    this.errorMessage = '';
     this.authService.resetPasswordWithOtp(this.resetEmail.trim(), this.otpCode.trim(), this.newPassword).subscribe({
       next: () => {
         this.resetting = false;
         this.showForgotModal = false;
         this.successMessage = 'Password reset successfully! Please sign in with your new password.';
-        this.username = this.resetEmail;
-        this.password = this.newPassword;
+        // Leave fields clean and empty with placeholder visible per user requirements
+        this.username = '';
+        this.password = '';
+        this.resetEmail = '';
+        this.otpCode = '';
+        this.newPassword = '';
+        this.confirmPassword = '';
       },
-      error: () => {
+      error: (err: any) => {
         this.resetting = false;
-        this.showForgotModal = false;
-        this.successMessage = 'Password reset successfully! Please sign in with your new password.';
-        this.username = this.resetEmail;
-        this.password = this.newPassword;
+        this.errorMessage = err.error?.message || err.message || 'Failed to reset password. Please check your OTP and try again.';
       }
     });
   }

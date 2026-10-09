@@ -562,7 +562,7 @@ export type PurchaseTypeFilter = 'ALL' | 'NORMAL' | 'BIDDING';
                 <i class="fa-solid fa-money-bill-wave text-primary"></i>
               </div>
               <h3 class="agg-val text-primary">₹{{ adminTotalGmv | number:'1.2-2' }}</h3>
-              <span class="agg-desc">100% Cleared via Escrow</span>
+              <span class="agg-desc">100% Cleared Settlement</span>
             </div>
 
             <div class="agg-card card-farmer-payout">
