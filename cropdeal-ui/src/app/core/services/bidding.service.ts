@@ -150,6 +150,10 @@ export class BiddingService {
               if (existing) {
                 existing.currentHighestBid = Math.max(highest, existing.currentHighestBid || 0);
                 existing.bidsCount = Math.max(bidsCount, existing.bidsCount || 0);
+                if (a.photoUrl) {
+                  existing.imageUrl = a.photoUrl;
+                  (existing as any).photoUrl = a.photoUrl;
+                }
                 if (a.bids && a.bids.length > 0) {
                   existing.bidsHistory = a.bids.map((b: any) => ({
                     bidderName: b.dealerName || b.bidderName || ('Dealer #' + b.dealerId),
@@ -161,6 +165,8 @@ export class BiddingService {
               } else {
                 mapById.set(sid, {
                   ...a,
+                  imageUrl: a.photoUrl || a.imageUrl || '',
+                  photoUrl: a.photoUrl || a.imageUrl || '',
                   startingPrice: Number(a.basePrice || a.startingPrice || 20),
                   currentHighestBid: highest,
                   bidsCount: bidsCount
@@ -191,9 +197,16 @@ export class BiddingService {
     );
   }
 
+  uploadBiddingImage(file: File): Observable<{ imageUrl: string; photoUrl: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<{ imageUrl: string; photoUrl: string }>(`${this.baseUrl}/upload-image`, formData);
+  }
+
   createAuction(auction: Partial<BiddingAuction>): Observable<BiddingAuction> {
     const list = this.loadStoredAuctions();
     const startingPrice = Number(auction.startingPrice || 20);
+    const photoUrl = (auction as any).photoUrl || auction.imageUrl || '';
     const newAuction: BiddingAuction = {
       id: auction.id || ('AUCT-' + Math.floor(100 + Math.random() * 900)),
       cropId: auction.cropId || 'crop-' + Date.now(),
@@ -212,15 +225,22 @@ export class BiddingService {
       minIncrement: auction.minIncrement || 1,
       location: auction.location || 'Local Mandi APMC',
       variety: auction.variety || 'Grade A Produce',
+      imageUrl: photoUrl,
       createdAt: new Date().toISOString(),
       bidsHistory: auction.bidsHistory || []
     };
+    (newAuction as any).photoUrl = photoUrl;
 
     list.unshift(newAuction);
     this.saveStoredAuctions(list);
 
-    // Call backend
-    this.http.post<BiddingAuction>(this.baseUrl, newAuction).subscribe({
+    // Call backend with photoUrl
+    const payload = {
+      ...newAuction,
+      basePrice: startingPrice,
+      photoUrl: photoUrl
+    };
+    this.http.post<BiddingAuction>(this.baseUrl, payload).subscribe({
       next: () => {},
       error: () => {}
     });

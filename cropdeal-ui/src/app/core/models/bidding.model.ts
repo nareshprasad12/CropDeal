@@ -20,6 +20,8 @@ export interface BiddingAuction {
   location?: string | null;
   variety?: string | null;
   createdAt?: string;
+  imageUrl?: string;
+  photoUrl?: string;
   bidsHistory?: Array<{ bidderName: string; bidPriceKg: number; bidTime: string }>;
 }
 

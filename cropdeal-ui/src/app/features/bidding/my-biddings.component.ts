@@ -127,7 +127,7 @@ interface DealerBidRow {
             <div *ngFor="let item of filteredDealerBids" class="auction-card shadow-sm">
               <!-- Card Media Wrap -->
               <div class="card-media-wrap">
-                <img [src]="getCropImage(item.auction.cropName)" [alt]="item.auction.cropName" class="auction-thumb" (error)="onThumbError($event)" />
+                <img [src]="item.auction.photoUrl || item.auction.imageUrl || getCropImage(item.auction.cropName)" [alt]="item.auction.cropName" class="auction-thumb" (error)="onThumbError($event)" />
 
                 <!-- Winning or Outbid Badge -->
                 <span class="status-pill" [ngClass]="item.isWinning ? 'pill-winning' : 'pill-outbid'">
@@ -306,7 +306,7 @@ interface DealerBidRow {
             <div *ngFor="let auc of filteredFarmerAuctions" class="auction-card shadow-sm">
               <!-- Card Media Wrap -->
               <div class="card-media-wrap">
-                <img [src]="getCropImage(auc.cropName)" [alt]="auc.cropName" class="auction-thumb" (error)="onThumbError($event)" />
+                <img [src]="auc.photoUrl || auc.imageUrl || getCropImage(auc.cropName)" [alt]="auc.cropName" class="auction-thumb" (error)="onThumbError($event)" />
 
                 <!-- Status Pill -->
                 <span class="status-pill" [ngClass]="auc.status === 'OPEN' ? 'pill-live' : 'pill-closed'">
@@ -492,6 +492,51 @@ interface DealerBidRow {
                 <option [value]="24">24 Hours (Full Day)</option>
                 <option [value]="48">48 Hours (2 Days)</option>
               </select>
+            </div>
+
+            <!-- Image Upload from Device (Cloudinary) -->
+            <div class="form-group mt-2">
+              <label><i class="fa-solid fa-cloud-arrow-up text-emerald"></i> Lot Image (Device / Cloudinary)</label>
+              <div class="image-upload-wrapper">
+                <input
+                  type="file"
+                  id="myBiddingFileInput"
+                  (change)="onBiddingFileSelected($event)"
+                  accept="image/*"
+                  style="display: none;" />
+                <label for="myBiddingFileInput" class="btn-file-select" [class.uploading]="isUploadingBiddingImage">
+                  <i class="fa-solid fa-cloud-arrow-up" *ngIf="!isUploadingBiddingImage"></i>
+                  <i class="fa-solid fa-spinner fa-spin text-emerald" *ngIf="isUploadingBiddingImage"></i>
+                  <span>{{ isUploadingBiddingImage ? 'Uploading to Cloudinary...' : (selectedBiddingFile ? 'Change (' + selectedBiddingFile.name + ')' : 'Choose Image from Machine') }}</span>
+                </label>
+
+                <!-- Cloudinary Preview Card -->
+                <div *ngIf="newCropImage || selectedBiddingPreview" class="image-preview-card mt-2">
+                  <img
+                    [src]="newCropImage || selectedBiddingPreview"
+                    alt="Auction preview"
+                    class="produce-preview-thumb"
+                    (error)="onThumbError($event)" />
+                  <div class="preview-info">
+                    <span class="preview-title">{{ selectedBiddingFile ? selectedBiddingFile.name : (newAuction.cropName || 'Bidding Lot Produce') }}</span>
+                    <span class="badge-cloud" *ngIf="cloudinaryBiddingUrl || (newCropImage && newCropImage.includes('cloudinary'))">
+                      <i class="fa-solid fa-cloud-bolt text-emerald"></i> Hosted on Cloudinary
+                    </span>
+                    <span class="badge-ready" *ngIf="!cloudinaryBiddingUrl && (!newCropImage || !newCropImage.includes('cloudinary'))">
+                      <i class="fa-solid fa-image text-primary"></i> Ready for Upload
+                    </span>
+                  </div>
+                </div>
+
+                <!-- URL text input option -->
+                <div class="mt-2">
+                  <input
+                    type="url"
+                    [(ngModel)]="newCropImage"
+                    placeholder="Or paste Cloud/Web Image URL (optional)"
+                    class="modal-input text-xs" />
+                </div>
+              </div>
             </div>
           </div>
           <div class="modal-footer">
@@ -936,6 +981,88 @@ interface DealerBidRow {
       gap: 0.4rem;
     }
 
+    /* Cloudinary Image Upload Styling */
+    .image-upload-wrapper { margin-top: 0.25rem; }
+    .btn-file-select {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.65rem 1.1rem;
+      background: #f0fdf4;
+      border: 1.5px dashed #16a34a;
+      border-radius: 0.5rem;
+      color: #15803d;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+      justify-content: center;
+    }
+    .btn-file-select:hover {
+      background: #dcfce7;
+      border-color: #15803d;
+    }
+    .btn-file-select.uploading {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      cursor: wait;
+    }
+    .image-preview-card {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: 0.6rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+    }
+    .produce-preview-thumb {
+      width: 58px;
+      height: 58px;
+      object-fit: cover;
+      border-radius: 0.4rem;
+      border: 1px solid #cbd5e1;
+    }
+    .preview-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      overflow: hidden;
+    }
+    .preview-title {
+      font-weight: 600;
+      font-size: 0.825rem;
+      color: #1e293b;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge-cloud {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.725rem;
+      color: #15803d;
+      background: #dcfce7;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.3rem;
+      font-weight: 600;
+      width: fit-content;
+    }
+    .badge-ready {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.725rem;
+      color: #2563eb;
+      background: #dbeafe;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.3rem;
+      font-weight: 600;
+      width: fit-content;
+    }
+
     @media (max-width: 1024px) {
       .stats-pills-row { grid-template-columns: repeat(2, 1fr); }
     }
@@ -971,6 +1098,11 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
     quantity: 1000,
     startingPrice: 20
   };
+  newCropImage: string = '';
+  selectedBiddingFile: File | null = null;
+  selectedBiddingPreview: string | null = null;
+  isUploadingBiddingImage = false;
+  cloudinaryBiddingUrl: string | null = null;
 
   private subs: Subscription[] = [];
 
@@ -1162,12 +1294,46 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
     });
   }
 
+  onBiddingFileSelected(event: any): void {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+
+    this.selectedBiddingFile = file;
+
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      this.selectedBiddingPreview = e.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    this.isUploadingBiddingImage = true;
+    this.biddingService.uploadBiddingImage(file).subscribe({
+      next: (res: any) => {
+        this.isUploadingBiddingImage = false;
+        const uploadedUrl = res.photoUrl || res.imageUrl || res.url;
+        if (uploadedUrl) {
+          this.cloudinaryBiddingUrl = uploadedUrl;
+          this.newCropImage = uploadedUrl;
+        }
+      },
+      error: (err) => {
+        console.warn('Bidding image upload warning:', err);
+        this.isUploadingBiddingImage = false;
+      }
+    });
+  }
+
   openCreateModal(): void {
     this.newAuction = {
       cropName: '',
       quantity: 5000,
       startingPrice: 22
     };
+    this.newCropImage = '';
+    this.selectedBiddingFile = null;
+    this.selectedBiddingPreview = null;
+    this.cloudinaryBiddingUrl = null;
+    this.isUploadingBiddingImage = false;
     this.showCreateModal = true;
   }
 
@@ -1177,12 +1343,16 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const finalImageUrl = this.newCropImage || this.cloudinaryBiddingUrl || this.selectedBiddingPreview || resolveCropImage(this.newAuction.cropName);
+
     this.biddingService.createAuction({
       ...this.newAuction,
+      imageUrl: finalImageUrl,
+      photoUrl: finalImageUrl,
       farmerId: this.user?.id || 'farmer-1',
       farmerName: this.user?.fullName || this.user?.username || null,
       durationHours: this.auctionDurationHours
-    }).subscribe({
+    } as any).subscribe({
       next: (created) => {
         this.showCreateModal = false;
         this.actionMsg = `✓ Bidding lot for ${created.cropName} launched successfully!`;

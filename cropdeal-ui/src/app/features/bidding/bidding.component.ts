@@ -576,6 +576,51 @@ interface AuctionItem {
               <label>Starting Floor Price (₹/Kg) *</label>
               <input type="number" [(ngModel)]="newStartingPriceKg" placeholder="22.00" class="form-input" />
             </div>
+
+            <!-- Image Upload from Device (Cloudinary) -->
+            <div class="form-group mt-2">
+              <label><i class="fa-solid fa-cloud-arrow-up text-emerald"></i> Lot Image (Device / Cloudinary)</label>
+              <div class="image-upload-wrapper">
+                <input
+                  type="file"
+                  id="biddingFileInput"
+                  (change)="onBiddingFileSelected($event)"
+                  accept="image/*"
+                  style="display: none;" />
+                <label for="biddingFileInput" class="btn-file-select" [class.uploading]="isUploadingBiddingImage">
+                  <i class="fa-solid fa-cloud-arrow-up" *ngIf="!isUploadingBiddingImage"></i>
+                  <i class="fa-solid fa-spinner fa-spin text-emerald" *ngIf="isUploadingBiddingImage"></i>
+                  <span>{{ isUploadingBiddingImage ? 'Uploading to Cloudinary...' : (selectedBiddingFile ? 'Change (' + selectedBiddingFile.name + ')' : 'Choose Image from Machine') }}</span>
+                </label>
+
+                <!-- Cloudinary Preview Card -->
+                <div *ngIf="newCropImage || selectedBiddingPreview" class="image-preview-card mt-2">
+                  <img
+                    [src]="newCropImage || selectedBiddingPreview"
+                    alt="Auction preview"
+                    class="produce-preview-thumb"
+                    (error)="onThumbError($event)" />
+                  <div class="preview-info">
+                    <span class="preview-title">{{ selectedBiddingFile ? selectedBiddingFile.name : (newCropName || 'Bidding Lot Produce') }}</span>
+                    <span class="badge-cloud" *ngIf="cloudinaryBiddingUrl || (newCropImage && newCropImage.includes('cloudinary'))">
+                      <i class="fa-solid fa-cloud-bolt text-emerald"></i> Hosted on Cloudinary
+                    </span>
+                    <span class="badge-ready" *ngIf="!cloudinaryBiddingUrl && (!newCropImage || !newCropImage.includes('cloudinary'))">
+                      <i class="fa-solid fa-image text-primary"></i> Ready for Upload
+                    </span>
+                  </div>
+                </div>
+
+                <!-- URL text input option -->
+                <div class="mt-2">
+                  <input
+                    type="url"
+                    [(ngModel)]="newCropImage"
+                    placeholder="Or paste Cloud/Web Image URL (optional)"
+                    class="form-input text-xs" />
+                </div>
+              </div>
+            </div>
           </div>
           <div class="modal-footer-simple">
             <button class="btn-cancel" (click)="showCreateModal = false">Cancel</button>
@@ -1081,6 +1126,88 @@ interface AuctionItem {
     .escrow-rule-text { line-height: 1.4; display: flex; align-items: flex-start; gap: 0.35rem; }
     .badge-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
 
+    /* Cloudinary Image Upload Styling */
+    .image-upload-wrapper { margin-top: 0.25rem; }
+    .btn-file-select {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.65rem 1.1rem;
+      background: #f0fdf4;
+      border: 1.5px dashed #16a34a;
+      border-radius: 0.5rem;
+      color: #15803d;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+      justify-content: center;
+    }
+    .btn-file-select:hover {
+      background: #dcfce7;
+      border-color: #15803d;
+    }
+    .btn-file-select.uploading {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      cursor: wait;
+    }
+    .image-preview-card {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: 0.6rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+    }
+    .produce-preview-thumb {
+      width: 58px;
+      height: 58px;
+      object-fit: cover;
+      border-radius: 0.4rem;
+      border: 1px solid #cbd5e1;
+    }
+    .preview-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      overflow: hidden;
+    }
+    .preview-title {
+      font-weight: 600;
+      font-size: 0.825rem;
+      color: #1e293b;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge-cloud {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.725rem;
+      color: #15803d;
+      background: #dcfce7;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.3rem;
+      font-weight: 600;
+      width: fit-content;
+    }
+    .badge-ready {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.725rem;
+      color: #2563eb;
+      background: #dbeafe;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.3rem;
+      font-weight: 600;
+      width: fit-content;
+    }
+
     @media (max-width: 1024px) {
       .auctions-grid { grid-template-columns: repeat(3, 1fr); }
       .modal-grid-2col { grid-template-columns: 1fr; }
@@ -1117,6 +1244,11 @@ export class BiddingComponent implements OnInit, OnDestroy {
   newCropName = '';
   newQuantityKg = 5000;
   newStartingPriceKg = 20.00;
+  newCropImage: string = '';
+  selectedBiddingFile: File | null = null;
+  selectedBiddingPreview: string | null = null;
+  isUploadingBiddingImage = false;
+  cloudinaryBiddingUrl: string | null = null;
 
   // Dynamic auctions list
   auctions: AuctionItem[] = [];
@@ -1231,7 +1363,7 @@ export class BiddingComponent implements OnInit, OnDestroy {
       cropName: sa.cropName || 'Fresh Harvest Crop',
       variety: sa.variety || null,
       grade: sa.grade || null,
-      image: sa.imageUrl || resolveCropImage(sa.cropName),
+      image: sa.photoUrl || sa.imageUrl || resolveCropImage(sa.cropName),
       location: sa.location || null,
       district: sa.district || null,
       state: sa.state || null,
@@ -1627,11 +1759,48 @@ export class BiddingComponent implements OnInit, OnDestroy {
     setTimeout(() => { this.toastMsg = ''; }, 6000);
   }
 
+  onBiddingFileSelected(event: any): void {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+
+    this.selectedBiddingFile = file;
+
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      this.selectedBiddingPreview = e.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    this.isUploadingBiddingImage = true;
+    this.biddingService.uploadBiddingImage(file).subscribe({
+      next: (res: any) => {
+        this.isUploadingBiddingImage = false;
+        const uploadedUrl = res.photoUrl || res.imageUrl || res.url;
+        if (uploadedUrl) {
+          this.cloudinaryBiddingUrl = uploadedUrl;
+          this.newCropImage = uploadedUrl;
+        }
+      },
+      error: (err) => {
+        console.warn('Bidding image upload warning:', err);
+        this.isUploadingBiddingImage = false;
+      }
+    });
+  }
+
   openCreateModal(): void {
     if (!this.user) {
       this.authModalService.open('Please sign in or quick-login to create auctions.');
       return;
     }
+    this.newCropName = '';
+    this.newQuantityKg = 5000;
+    this.newStartingPriceKg = 20.00;
+    this.newCropImage = '';
+    this.selectedBiddingFile = null;
+    this.selectedBiddingPreview = null;
+    this.cloudinaryBiddingUrl = null;
+    this.isUploadingBiddingImage = false;
     this.showCreateModal = true;
   }
 
@@ -1642,12 +1811,14 @@ export class BiddingComponent implements OnInit, OnDestroy {
     }
 
     const endIso = new Date(Date.now() + 12 * 3600000).toISOString();
+    const finalImageUrl = this.newCropImage || this.cloudinaryBiddingUrl || this.selectedBiddingPreview || resolveCropImage(this.newCropName);
+
     const newAuc: AuctionItem = {
       id: 'auc-' + Date.now(),
       cropName: this.newCropName,
       variety: 'Grade A Produce',
       grade: 'A Grade',
-      image: resolveCropImage(this.newCropName),
+      image: finalImageUrl,
       location: 'Ludhiana, Punjab',
       district: 'Ludhiana',
       state: 'Punjab',
@@ -1683,8 +1854,10 @@ export class BiddingComponent implements OnInit, OnDestroy {
       farmerName: newAuc.farmerName,
       farmerId: newAuc.farmerId,
       status: 'OPEN',
+      imageUrl: finalImageUrl,
+      photoUrl: finalImageUrl,
       bidsCount: 0
-    }).subscribe({ error: () => {} });
+    } as any).subscribe({ error: () => {} });
 
     this.showCreateModal = false;
     this.toastMsg = `🎉 New Bidding Floor for "${newAuc.cropName}" launched! Dealers can place bids now.`;
