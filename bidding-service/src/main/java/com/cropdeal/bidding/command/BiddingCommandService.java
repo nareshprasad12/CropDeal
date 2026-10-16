@@ -95,25 +95,43 @@ public class BiddingCommandService {
             }
         }
 
+        BigDecimal lotQuantity = listing.getQuantity() != null && listing.getQuantity().compareTo(BigDecimal.ZERO) > 0
+                ? listing.getQuantity()
+                : BigDecimal.ONE;
+        BigDecimal totalLotBidAmount = request.bidAmount().multiply(lotQuantity);
         String newRefId = "BID-" + listingId + "-" + request.dealerId();
 
-        walletClient.reserveFunds(new WalletClient.ReserveRequest(request.dealerId(), newRefId, request.bidAmount()));
+        // Find all existing active bids on this listing
+        List<Bid> activeBids = bidRepository.findByListingIdAndStatus(listingId, BidStatus.ACTIVE);
 
-        bidRepository.findFirstByListingIdAndStatusOrderByBidAmountDesc(listingId, BidStatus.ACTIVE).ifPresent(prev -> {
-            if (!prev.getDealerId().equals(request.dealerId())) {
-                prev.setStatus(BidStatus.OUTBID);
-                bidRepository.save(prev);
+        // 1. If the same dealer is raising their bid, release their previous hold first so their available balance is credited
+        for (Bid prev : activeBids) {
+            if (prev.getDealerId().equals(request.dealerId())) {
                 try {
-                    String prevRefId = "BID-" + listingId + "-" + prev.getDealerId();
-                    walletClient.releaseFunds(new WalletClient.ReleaseRequest(prev.getDealerId(), prevRefId));
+                    String sameDealerRefId = "BID-" + listingId + "-" + prev.getDealerId();
+                    walletClient.releaseFunds(new WalletClient.ReleaseRequest(prev.getDealerId(), sameDealerRefId));
+                } catch (Exception e) {
+                    // Ignore release warning
+                }
+            }
+        }
+
+        // 2. Reserve total lot valuation from the bidder's available wallet balance
+        walletClient.reserveFunds(new WalletClient.ReserveRequest(request.dealerId(), newRefId, totalLotBidAmount));
+
+        // 3. Mark all previous active bids as OUTBID, and unreserve/release escrow holds for any outbid dealers
+        for (Bid prev : activeBids) {
+            prev.setStatus(BidStatus.OUTBID);
+            bidRepository.save(prev);
+            if (!prev.getDealerId().equals(request.dealerId())) {
+                try {
+                    String outbidDealerRefId = "BID-" + listingId + "-" + prev.getDealerId();
+                    walletClient.releaseFunds(new WalletClient.ReleaseRequest(prev.getDealerId(), outbidDealerRefId));
                 } catch (Exception e) {
                     // Log release failure
                 }
-            } else {
-                prev.setStatus(BidStatus.OUTBID);
-                bidRepository.save(prev);
             }
-        });
+        }
 
         Bid bid = new Bid();
         bid.setListingId(listingId);
@@ -156,7 +174,12 @@ public class BiddingCommandService {
         }
 
         String refId = "BID-" + listingId + "-" + listing.getWinningDealerId();
-        walletClient.consumeFunds(new WalletClient.ConsumeRequest(listing.getWinningDealerId(), refId));
+        walletClient.consumeFunds(new WalletClient.ConsumeRequest(
+                listing.getWinningDealerId(),
+                refId,
+                listing.getFarmerId(),
+                listing.getCropName()
+        ));
 
         try {
             orderClient.createOrder(new OrderClient.CreateOrderRequest(
@@ -213,6 +236,16 @@ public class BiddingCommandService {
         BiddingListing listing = findListing(listingId);
         listing.setStatus(BiddingStatus.CLOSED);
         listingRepository.save(listing);
+
+        // If there was an active winning bid, release the reserved funds back to the dealer
+        if (listing.getWinningDealerId() != null) {
+            String refId = "BID-" + listingId + "-" + listing.getWinningDealerId();
+            try {
+                walletClient.releaseFunds(new WalletClient.ReleaseRequest(listing.getWinningDealerId(), refId));
+            } catch (Exception e) {
+                // Ignore release error
+            }
+        }
     }
 
     public BiddingListingResponse toggleBlockListing(Long listingId, boolean block) {

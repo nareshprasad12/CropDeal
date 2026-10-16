@@ -34,12 +34,13 @@ interface AuctionItem {
   farmerRating: number;
   farmerReviewsCount: number;
   farmerId: string;
+  highestBidderId?: string;
   bidsCount: number;
   timeRemaining: string;
   isEndingSoon: boolean;
   status: 'OPEN' | 'CLOSED';
   isFavorite?: boolean;
-  bidsHistory: Array<{ bidderName: string; bidPriceKg: number; bidTime: string }>;
+  bidsHistory: Array<{ bidderName: string; bidPriceKg: number; bidTime: string; dealerId?: string }>;
   endTime?: string;
 }
 
@@ -320,73 +321,100 @@ interface AuctionItem {
         </div>
       </div>
 
-      <!-- AUCTION DETAIL & BID SUBMISSION MODAL (matches image7.png) -->
+      <!-- AUCTION DETAIL & BID SUBMISSION MODAL (matches Image 2 AFTER) -->
       <div *ngIf="selectedAuction" class="modal-backdrop">
         <div class="modal-dialog-large shadow-2xl">
           <div class="modal-header-nav">
             <button class="back-link" (click)="selectedAuction = null">
-              <i class="fa-solid fa-arrow-left"></i> Back / Live Bidding / <strong>{{ selectedAuction.cropName }}</strong>
+              <i class="fa-solid fa-arrow-left"></i> Live Bidding Floor &nbsp;/&nbsp; <strong class="crop-header-name">{{ selectedAuction.cropName }}</strong>
             </button>
-            <button class="close-x" (click)="selectedAuction = null">&times;</button>
+            <div class="header-right-actions">
+              <span class="lot-pill"><i class="fa-solid fa-bars-staggered"></i> Lot #{{ selectedAuction.id }}</span>
+              <button class="close-x-btn" (click)="selectedAuction = null" title="Close modal">&times;</button>
+            </div>
           </div>
 
           <div class="modal-grid-2col">
             <!-- Left Side: Product info, Timer & Bid Form -->
             <div class="modal-left-col">
-              <div class="product-banner">
-                <img [src]="selectedAuction.image" [alt]="selectedAuction.cropName" class="main-modal-img" />
-                <div class="product-thumbs-strip">
-                  <img [src]="selectedAuction.image" class="thumb active" />
-                  <img src="/assets/images/crop-rice.jpg" class="thumb" />
-                  <img src="/assets/images/crop-wheat.jpg" class="thumb" />
-                  <img src="/assets/images/crop-maize.jpg" class="thumb" />
+              <div class="product-banner-new">
+                <img [src]="selectedAuction.image" [alt]="selectedAuction.cropName" class="main-modal-img-new" />
+                <div class="img-badge-overlay-tl">
+                  <span class="pulse-dot-green"></span> Live Auction Lot
+                </div>
+                <div class="img-badge-overlay-tr">
+                  <i class="fa-solid fa-certificate"></i> {{ selectedAuction.grade && selectedAuction.grade !== 'null' ? selectedAuction.grade : 'A Grade' }}
+                </div>
+                <div class="img-badge-overlay-bl">
+                  <i class="fa-solid fa-location-dot"></i> {{ selectedAuction.location && selectedAuction.location !== 'null' ? selectedAuction.location : 'Local Mandi APMC' }}
+                </div>
+                <div class="img-badge-overlay-br">
+                  <i class="fa-solid fa-wheat-awn"></i> {{ selectedAuction.variety && selectedAuction.variety !== 'null' ? selectedAuction.variety : 'Grade A Produce' }}
                 </div>
               </div>
 
-              <div class="product-header mt-3">
+              <div class="product-header-new mt-3">
                 <div class="title-pills-row">
-                  <h2>{{ selectedAuction.cropName }}</h2>
-                  <span class="pill-live"><span class="status-dot"></span> Live Bidding</span>
-                  <span class="pill-ending" *ngIf="selectedAuction.isEndingSoon"><span class="status-dot"></span> Ending Soon</span>
+                  <h2 class="crop-main-title">{{ selectedAuction.cropName }}</h2>
+                  <span class="pill-bidding-active">Bidding Active</span>
                 </div>
-                <div class="specs-line">
-                  <span>Variety: <strong>{{ selectedAuction.variety }}</strong></span>
+                <div class="specs-line-new">
+                  <span>Variety: <strong>{{ selectedAuction.variety && selectedAuction.variety !== 'null' ? selectedAuction.variety : 'Grade A Produce' }}</strong></span>
                   <span class="dot-sep">•</span>
-                  <span>Grade: <strong>{{ selectedAuction.grade }}</strong></span>
+                  <span>Total Harvest: <strong>{{ selectedAuction.totalQuantityKg | number:'1.0-0' }} Kg</strong></span>
                   <span class="dot-sep">•</span>
-                  <span><i class="fa-solid fa-location-dot"></i> {{ selectedAuction.location }}</span>
+                  <span>State: <strong>{{ selectedAuction.state && selectedAuction.state !== 'null' ? selectedAuction.state : 'Tamil Nadu' }}</strong></span>
                 </div>
               </div>
 
-              <!-- 4 Metrics Highlights (Farmer Fixed Price + Highest Bid + Quantity + Timer) -->
-              <div class="metrics-4box mt-3">
-                <div class="box">
-                  <span class="lbl">Farmer Fixed Price</span>
-                  <strong class="val text-dark">₹{{ selectedAuction.startingPriceKg | number:'1.2-2' }} <small>/ Kg</small></strong>
+              <!-- 4 Metrics Highlights (Farmer Base Rate + Highest Bid + Full Lot Size + Time Left) -->
+              <div class="metrics-4grid mt-3">
+                <div class="metric-card">
+                  <div class="m-card-header">
+                    <i class="fa-solid fa-tag text-muted"></i>
+                    <span class="m-card-lbl">FARMER BASE RATE</span>
+                  </div>
+                  <strong class="m-card-val text-dark">₹{{ selectedAuction.startingPriceKg | number:'1.2-2' }} <small class="text-muted">/ Kg</small></strong>
                 </div>
-                <div class="box">
-                  <span class="lbl">Current Highest Bid</span>
-                  <strong class="val text-emerald">
-                    <ng-container *ngIf="selectedAuction.bidsCount > 0">₹{{ selectedAuction.currentBidKg | number:'1.2-2' }} <small>/ Kg</small></ng-container>
+
+                <div class="metric-card highest-bid-card">
+                  <div class="m-card-header">
+                    <i class="fa-solid fa-crown text-emerald"></i>
+                    <span class="m-card-lbl text-emerald">CURRENT HIGHEST BID</span>
+                  </div>
+                  <strong class="m-card-val text-emerald">
+                    <ng-container *ngIf="selectedAuction.bidsCount > 0">₹{{ selectedAuction.currentBidKg | number:'1.2-2' }} <small class="text-emerald">/ Kg</small></ng-container>
                     <ng-container *ngIf="selectedAuction.bidsCount === 0"><small class="text-muted">Awaiting 1st Bid</small></ng-container>
                   </strong>
                 </div>
-                <div class="box">
-                  <span class="lbl">Lot Quantity</span>
-                  <strong class="val">{{ selectedAuction.totalQuantityKg | number:'1.0-0' }} Kg</strong>
+
+                <div class="metric-card">
+                  <div class="m-card-header">
+                    <i class="fa-solid fa-boxes-stacked text-muted"></i>
+                    <span class="m-card-lbl">FULL LOT SIZE</span>
+                  </div>
+                  <strong class="m-card-val text-dark">{{ selectedAuction.totalQuantityKg | number:'1.0-0' }} Kg</strong>
                 </div>
-                <div class="box">
-                  <span class="lbl">Time Remaining</span>
-                  <strong class="val text-danger"><i class="fa-regular fa-clock"></i> {{ selectedAuction.timeRemaining }}</strong>
+
+                <div class="metric-card time-left-card">
+                  <div class="m-card-header">
+                    <i class="fa-regular fa-clock text-danger"></i>
+                    <span class="m-card-lbl text-danger">TIME LEFT</span>
+                  </div>
+                  <strong class="m-card-val text-danger">{{ selectedAuction.timeRemaining }}</strong>
                 </div>
               </div>
 
               <!-- Place Bid Form Box -->
-              <div class="bid-submission-box mt-3">
-                <div class="bid-box-title">
-                  <i class="fa-solid fa-gavel text-emerald"></i>
-                  <h4>Place Your Bid</h4>
-                  <span class="subtext">Your bid must be strictly higher than the current highest bid (₹{{ selectedAuction.currentBidKg | number:'1.2-2' }}/Kg)</span>
+              <div class="bid-submission-box-new mt-3">
+                <div class="bid-box-header-new">
+                  <div class="gavel-icon-circle">
+                    <i class="fa-solid fa-gavel text-emerald"></i>
+                  </div>
+                  <div>
+                    <h4 class="bid-box-title-text">Place Your Live Floor Bid</h4>
+                    <span class="bid-box-subtext">Must be higher than highest bid (₹{{ selectedAuction.currentBidKg | number:'1.2-2' }}/Kg)</span>
+                  </div>
                 </div>
 
                 <div class="bid-inputs-row mt-3">
@@ -435,20 +463,23 @@ interface AuctionItem {
                 <div class="wallet-escrow-box mt-3" [ngClass]="dealerWalletBalance >= calculatedTotalAmount ? 'escrow-ok' : 'escrow-low'">
                   <div class="d-flex justify-content-between align-center">
                     <div>
-                      <span class="text-xs text-muted d-block"><i class="fa-solid fa-wallet text-emerald"></i> Your Digital Wallet Balance</span>
+                      <span class="text-xs text-muted d-block"><i class="fa-solid fa-wallet text-emerald"></i> Available Unreserved Balance</span>
                       <strong class="text-base text-dark">₹{{ dealerWalletBalance | number:'1.2-2' }}</strong>
+                      <small *ngIf="dealerReservedBalance > 0" class="text-muted d-block text-xs">
+                        (₹{{ dealerReservedBalance | number:'1.2-2' }} reserved in other active bids)
+                      </small>
                     </div>
                     <span class="badge" [ngClass]="dealerWalletBalance >= calculatedTotalAmount ? 'badge-success' : 'badge-danger'">
-                      {{ dealerWalletBalance >= calculatedTotalAmount ? '✓ Wallet Sufficient' : '⚠️ Insufficient Funds' }}
+                      {{ dealerWalletBalance >= calculatedTotalAmount ? '✓ Balance Sufficient' : '⚠️ Insufficient Funds' }}
                     </span>
                   </div>
                   <div class="escrow-rule-text mt-2 text-xs" *ngIf="dealerWalletBalance < calculatedTotalAmount">
                     <i class="fa-solid fa-triangle-exclamation text-danger"></i>
-                    Bidding requires sufficient wallet balance to buy the full lot (₹{{ calculatedTotalAmount | number:'1.0-0' }}). Please top up your wallet to place this bid.
+                    Bidding requires sufficient unreserved wallet balance to buy the full lot (₹{{ calculatedTotalAmount | number:'1.0-0' }}). You currently have ₹{{ dealerWalletBalance | number:'1.0-0' }} available (₹{{ dealerReservedBalance | number:'1.0-0' }} is locked in other active bids).
                   </div>
                   <div class="escrow-rule-text mt-2 text-xs text-emerald" *ngIf="dealerWalletBalance >= calculatedTotalAmount">
                     <i class="fa-solid fa-shield-halved"></i>
-                    Bidding purchases are paid using wallet balance. ₹{{ calculatedTotalAmount | number:'1.0-0' }} is verified from your wallet.
+                    Upon placing this bid, ₹{{ calculatedTotalAmount | number:'1.0-0' }} will be reserved in digital escrow. If outbid or cancelled, funds return immediately to your available balance.
                   </div>
                 </div>
 
@@ -473,53 +504,55 @@ interface AuctionItem {
 
             <!-- Right Side: Farmer Details, Auction Details, Live Bids -->
             <div class="modal-right-col">
-              <!-- Farmer Details Card (matches image7.png) -->
+              <!-- Farmer Details Card (matches Image 2 AFTER) -->
               <div class="detail-card">
-                <h4 class="card-sec-title">Farmer Details</h4>
+                <h4 class="card-sec-title">
+                  <i class="fa-solid fa-user-check text-emerald"></i> Farmer Details
+                </h4>
                 <div class="farmer-profile-row">
                   <div class="farmer-avatar-lg">
                     <i class="fa-solid fa-user"></i>
                   </div>
                   <div class="farmer-profile-info">
                     <div class="f-name-row">
-                      <strong>{{ selectedAuction.farmerName && selectedAuction.farmerName !== 'null' ? selectedAuction.farmerName : 'Verified Farmer' }}</strong>
+                      <strong>{{ selectedAuction.farmerName && selectedAuction.farmerName !== 'null' ? selectedAuction.farmerName : 'Mohanraj' }}</strong>
                       <span class="verified-tag">✓ Verified Farmer</span>
                     </div>
-                    <span class="f-sub">Producer</span>
+                    <span class="f-sub">Producer • Verified Lot Owner</span>
                     <div class="rating-line">
-                      ⭐ <strong>{{ selectedAuction.farmerRating }}</strong> ({{ selectedAuction.farmerReviewsCount }} reviews)
+                      ⭐ <strong>{{ selectedAuction.farmerRating || '4.8' }}</strong> ({{ selectedAuction.farmerReviewsCount || 15 }} reviews)
                     </div>
                   </div>
                 </div>
 
-                <div class="farmer-contact-list mt-2">
-                  <div><i class="fa-solid fa-location-dot"></i> {{ selectedAuction.location && selectedAuction.location !== 'null' ? selectedAuction.location : 'Ludhiana, Punjab' }}</div>
-                  <div><i class="fa-solid fa-phone"></i> {{ selectedAuction.farmerPhone && selectedAuction.farmerPhone !== 'null' ? selectedAuction.farmerPhone : '+91 98140 11223' }}</div>
+                <div class="farmer-contact-list mt-3">
+                  <div><i class="fa-solid fa-location-dot text-emerald"></i> {{ selectedAuction.location && selectedAuction.location !== 'null' ? selectedAuction.location : 'Local Mandi APMC' }}</div>
+                  <div><i class="fa-solid fa-phone text-emerald"></i> {{ selectedAuction.farmerPhone && selectedAuction.farmerPhone !== 'null' ? selectedAuction.farmerPhone : '+91 98140 11223' }}</div>
                 </div>
               </div>
 
-              <!-- Auction Details (matches image7.png) -->
+              <!-- Auction Specifications (matches Image 2 AFTER) -->
               <div class="detail-card mt-3">
-                <h4 class="card-sec-title">Auction Details</h4>
+                <h4 class="card-sec-title">
+                  <i class="fa-solid fa-file-contract text-emerald"></i> Auction Specifications
+                </h4>
                 <div class="details-kv-list">
-                  <div class="kv-line"><span class="k">Auction Type</span><span class="v">Live Bidding</span></div>
-                  <div class="kv-line"><span class="k">Start Time</span><span class="v">13 Oct 2026, 09:00 AM</span></div>
-                  <div class="kv-line"><span class="k">End Time</span><span class="v">13 Oct 2026, 09:00 PM</span></div>
-                  <div class="kv-line"><span class="k">Total Quantity</span><span class="v">{{ selectedAuction.totalQuantityKg }} Kg</span></div>
+                  <div class="kv-line"><span class="k">Auction Type</span><span class="v">Live Public Floor</span></div>
                   <div class="kv-line"><span class="k">Commodity</span><span class="v">{{ selectedAuction.cropName }}</span></div>
                   <div class="kv-line"><span class="k">Variety</span><span class="v">{{ selectedAuction.variety && selectedAuction.variety !== 'null' ? selectedAuction.variety : 'Grade A Produce' }}</span></div>
-                  <div class="kv-line"><span class="k">Grade</span><span class="v">{{ selectedAuction.grade && selectedAuction.grade !== 'null' ? selectedAuction.grade : 'A Grade' }}</span></div>
-                  <div class="kv-line"><span class="k">State</span><span class="v">{{ selectedAuction.state && selectedAuction.state !== 'null' ? selectedAuction.state : 'Punjab' }}</span></div>
+                  <div class="kv-line"><span class="k">Quality Grade</span><span class="v">{{ selectedAuction.grade && selectedAuction.grade !== 'null' ? selectedAuction.grade : 'A Grade' }}</span></div>
+                  <div class="kv-line"><span class="k">Total Lot Quantity</span><span class="v">{{ selectedAuction.totalQuantityKg }} Kg</span></div>
+                  <div class="kv-line"><span class="k">Origin State</span><span class="v">{{ selectedAuction.state && selectedAuction.state !== 'null' ? selectedAuction.state : 'Tamil Nadu' }}</span></div>
                 </div>
               </div>
 
-              <!-- Latest 5 Bids History Table -->
+              <!-- Latest 5 Floor Bids History Table -->
               <div class="detail-card mt-3">
                 <div class="bids-history-header">
                   <h4 class="card-sec-title">
-                    <i class="fa-solid fa-list-ol text-emerald"></i> Latest 5 Bids
+                    <i class="fa-solid fa-list-ol text-emerald"></i> Latest 5 Floor Bids
                   </h4>
-                  <span class="badge-count">{{ selectedAuction.bidsHistory ? Math.min(5, selectedAuction.bidsHistory.length) : 0 }} of {{ selectedAuction.bidsCount || 0 }} Bids</span>
+                  <span class="badge-count">{{ selectedAuction.bidsHistory ? Math.min(5, selectedAuction.bidsHistory.length) : (selectedAuction.bidsCount > 0 ? selectedAuction.bidsCount : 0) }} of {{ selectedAuction.bidsCount || 0 }} Bids</span>
                 </div>
 
                 <div class="bids-table-wrap">
@@ -1006,42 +1039,106 @@ interface AuctionItem {
       padding-bottom: 1rem; border-bottom: 1px solid #e2e8f0; margin-bottom: 1.5rem;
     }
     .back-link {
-      background: none; border: none; font-size: 0.9rem; color: #475569;
-      cursor: pointer; display: flex; align-items: center; gap: 0.5rem;
+      background: none; border: none; font-size: 0.95rem; color: #475569;
+      cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 500;
     }
-    .close-x { background: none; border: none; font-size: 1.75rem; color: #64748b; cursor: pointer; }
-    .modal-grid-2col { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 2rem; }
+    .back-link:hover { color: #15803d; }
+    .crop-header-name { color: #166534; font-weight: 800; }
+    .header-right-actions { display: flex; align-items: center; gap: 0.75rem; }
+    .lot-pill {
+      background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d;
+      font-size: 0.8rem; font-weight: 700; padding: 0.35rem 0.85rem; border-radius: 9999px;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .close-x-btn {
+      width: 32px; height: 32px; border-radius: 50%; border: 1px solid #e2e8f0;
+      background: #f8fafc; font-size: 1.3rem; color: #64748b; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; line-height: 1; transition: all 0.2s;
+    }
+    .close-x-btn:hover { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+    .modal-grid-2col { display: grid; grid-template-columns: 1.25fr 0.85fr; gap: 2rem; }
 
-    .main-modal-img {
-      width: 100%; height: 220px; object-fit: cover; border-radius: 0.75rem;
+    /* New Image Banner without thumbnails (matches Image 2 AFTER) */
+    .product-banner-new {
+      position: relative; border-radius: 0.85rem; overflow: hidden; height: 260px;
+      background: #0f172a; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
-    .product-thumbs-strip {
-      display: flex; gap: 0.5rem; margin-top: 0.5rem;
+    .main-modal-img-new {
+      width: 100%; height: 100%; object-fit: cover; display: block;
     }
-    .product-thumbs-strip .thumb {
-      width: 60px; height: 50px; border-radius: 0.35rem; object-fit: cover;
-      border: 1.5px solid #cbd5e1; cursor: pointer;
+    .img-badge-overlay-tl {
+      position: absolute; top: 12px; left: 12px; background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(6px); color: #4ade80; padding: 5px 12px; border-radius: 9999px;
+      font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 0.45rem;
+      border: 1px solid rgba(255,255,255,0.15);
     }
-    .product-thumbs-strip .thumb.active { border-color: #15803d; }
-    .title-pills-row { display: flex; align-items: center; gap: 0.65rem; }
-    .title-pills-row h2 { font-size: 1.5rem; font-weight: 800; color: #0f172a; margin: 0; }
-    .specs-line { font-size: 0.8rem; color: #64748b; margin-top: 0.35rem; }
-    .dot-sep { margin: 0 0.35rem; }
+    .img-badge-overlay-tr {
+      position: absolute; top: 12px; right: 12px; background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(6px); color: #ffffff; padding: 5px 12px; border-radius: 9999px;
+      font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 0.45rem;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .img-badge-overlay-bl {
+      position: absolute; bottom: 12px; left: 12px; background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(6px); color: #ffffff; padding: 5px 12px; border-radius: 6px;
+      font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .img-badge-overlay-br {
+      position: absolute; bottom: 12px; right: 12px; background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(6px); color: #ffffff; padding: 5px 12px; border-radius: 6px;
+      font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .pulse-dot-green {
+      width: 8px; height: 8px; border-radius: 50%; background: #22c55e;
+      display: inline-block; box-shadow: 0 0 0 2px rgba(34,197,94,0.4);
+    }
 
-    .metrics-3box {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;
+    .product-header-new { margin-top: 1rem; }
+    .crop-main-title { font-size: 1.6rem; font-weight: 800; color: #0f172a; margin: 0; text-transform: lowercase; }
+    .pill-bidding-active {
+      background: #16a34a; color: white; padding: 4px 10px; border-radius: 4px;
+      font-size: 0.8rem; font-weight: 700; display: inline-block;
     }
-    .metrics-3box .box {
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem;
-      padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;
-    }
-    .metrics-3box .lbl { font-size: 0.68rem; color: #64748b; font-weight: 700; text-transform: uppercase; }
-    .metrics-3box .val { font-size: 1.15rem; font-weight: 800; }
+    .specs-line-new { font-size: 0.82rem; color: #64748b; margin-top: 0.35rem; }
 
-    .bid-submission-box {
-      background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 0.75rem;
-      padding: 1.25rem;
+    /* 4-Box Metrics Grid (matches Image 2 AFTER) */
+    .metrics-4grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem;
     }
+    .metric-card {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.65rem;
+      padding: 0.75rem 0.85rem; display: flex; flex-direction: column; gap: 0.35rem;
+    }
+    .metric-card.highest-bid-card {
+      background: #ecfdf5; border-color: #a7f3d0;
+    }
+    .metric-card.time-left-card {
+      background: #fef2f2; border-color: #fecaca;
+    }
+    .m-card-header {
+      display: flex; align-items: center; gap: 0.35rem; font-size: 0.68rem;
+      font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.02em;
+    }
+    .m-card-lbl { font-size: 0.68rem; font-weight: 700; }
+    .m-card-val { font-size: 1.15rem; font-weight: 800; }
+
+    /* Bid Submission Box */
+    .bid-submission-box-new {
+      background: #ffffff; border: 1.5px solid #a7f3d0; border-radius: 0.75rem;
+      padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .bid-box-header-new {
+      display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;
+    }
+    .gavel-icon-circle {
+      width: 36px; height: 36px; border-radius: 50%; background: #dcfce7;
+      display: flex; align-items: center; justify-content: center; font-size: 1rem;
+      color: #16a34a; flex-shrink: 0;
+    }
+    .bid-box-title-text { font-size: 1.05rem; font-weight: 800; color: #0f172a; margin: 0; }
+    .bid-box-subtext { font-size: 0.78rem; color: #64748b; }
     .bid-box-title h4 { font-size: 1.05rem; font-weight: 800; color: #166534; margin: 0; }
     .bid-box-title .subtext { font-size: 0.75rem; color: #15803d; }
     .bid-inputs-row { display: grid; grid-template-columns: 1fr 1.3fr; gap: 1rem; align-items: center; }
@@ -1237,7 +1334,9 @@ export class BiddingComponent implements OnInit, OnDestroy {
   selectedAuction: AuctionItem | null = null;
   userBidPrice = 23.00;
   calculatedTotalAmount = 115000;
-  dealerWalletBalance = 0;
+  dealerWalletBalance = 0;   // Available / Unreserved Balance
+  dealerReservedBalance = 0; // Locked in active bids
+  dealerTotalBalance = 0;    // Net balance
 
   // Create Auction
   showCreateModal = false;
@@ -1275,17 +1374,31 @@ export class BiddingComponent implements OnInit, OnDestroy {
       this.user = u;
       if (u) {
         const uid = String(u.id || u.userId || 'dealer-1');
+        const stored = this.walletService.getStoredWallet(uid);
+        this.dealerWalletBalance = stored.availableBalance;
+        this.dealerReservedBalance = stored.reservedBalance;
+        this.dealerTotalBalance = stored.balance;
+
         this.walletService.getWallet(uid).subscribe(w => {
-          this.dealerWalletBalance = w.balance;
+          if (w) {
+            this.dealerWalletBalance = w.availableBalance != null ? w.availableBalance : (w.balance - (w.reservedBalance || 0));
+            this.dealerReservedBalance = w.reservedBalance || 0;
+            this.dealerTotalBalance = w.totalBalance != null ? w.totalBalance : w.balance;
+          }
         });
-        this.dealerWalletBalance = this.walletService.getStoredBalance(uid);
       } else {
         this.dealerWalletBalance = 0;
+        this.dealerReservedBalance = 0;
+        this.dealerTotalBalance = 0;
       }
     });
 
-    this.walletService.balance$.subscribe(b => {
-      this.dealerWalletBalance = b;
+    this.walletService.wallet$.subscribe(w => {
+      if (w) {
+        this.dealerWalletBalance = w.availableBalance != null ? w.availableBalance : (w.balance - (w.reservedBalance || 0));
+        this.dealerReservedBalance = w.reservedBalance || 0;
+        this.dealerTotalBalance = w.totalBalance != null ? w.totalBalance : w.balance;
+      }
     });
 
     this.route.queryParams.subscribe(params => {
@@ -1363,6 +1476,10 @@ export class BiddingComponent implements OnInit, OnDestroy {
           ? (this.user?.name || this.user?.fullName || this.user?.username || 'Verified Farmer')
           : (String(sa.farmerId) === '10' ? 'vnareshprasad2004' : 'Sardar Gurpreet Singh'));
 
+    const highestBidderId = (serverBids.length > 0 && serverBids[0].dealerId)
+      ? String(serverBids[0].dealerId)
+      : (sa.winningDealerId ? String(sa.winningDealerId) : (sa.highestBidderId ? String(sa.highestBidderId) : undefined));
+
     return {
       id: String(sa.id),
       cropName: sa.cropName || 'Fresh Harvest Crop',
@@ -1380,6 +1497,7 @@ export class BiddingComponent implements OnInit, OnDestroy {
       farmerRating: 4.8,
       farmerReviewsCount: 15,
       farmerId: String(sa.farmerId || '1'),
+      highestBidderId: highestBidderId,
       bidsCount: count,
       timeRemaining: '08 : 30 : 00',
       isEndingSoon: false,
@@ -1470,19 +1588,18 @@ export class BiddingComponent implements OnInit, OnDestroy {
       const farmerUid = item.farmerId || this.user?.id || '1';
       const orderId = 'ORD-' + Math.floor(10000 + Math.random() * 90000);
 
-      // 1. Debit Dealer's Wallet
-      this.walletService.debitWallet(
+      // 1. Settle escrow: consume dealer's reserved funds and credit farmer's wallet
+      const refId = 'BID-' + item.id + '-' + dealerUid;
+      this.walletService.consumeFunds(
         dealerUid,
-        fullStockTotal,
-        `Bidding Won: Payment for Lot #${item.id} - ${item.cropName} (${item.totalQuantityKg} Kg)`
+        refId,
+        farmerUid,
+        item.cropName,
+        fullStockTotal
       ).subscribe();
 
-      // 2. Credit Farmer's Digital Wallet
-      this.walletService.creditWallet(
-        farmerUid,
-        fullStockTotal,
-        `Received Bidding Proceeds for Lot #${item.id}: ${item.cropName} (${item.totalQuantityKg} Kg) from ${highestBidder || 'Dealer'}`
-      ).subscribe();
+      // Release holds for all other dealers who placed bids on this lot
+      this.walletService.releaseAllBiddersForAuction(item.id, `Lot #${item.id} (${item.cropName}) awarded to highest bidder`, dealerUid);
 
       // 3. Register Order in OrderService as completed bidding lot
       const newOrder: any = {
@@ -1612,9 +1729,18 @@ export class BiddingComponent implements OnInit, OnDestroy {
 
   cancelBid(item: AuctionItem): void {
     if (confirm(`Are you sure you want to cancel the bidding lot for "${item.cropName}"?`)) {
+      // Release active dealer's escrow hold if present
+      const highestBidderId = (item.bidsHistory && item.bidsHistory.length > 0 && (item.bidsHistory[0] as any).dealerId)
+        ? String((item.bidsHistory[0] as any).dealerId)
+        : (item.highestBidderId ? String(item.highestBidderId) : null);
+      if (highestBidderId) {
+        const refId = 'BID-' + item.id + '-' + highestBidderId;
+        const holdAmt = Math.round(item.currentBidKg * item.totalQuantityKg);
+        this.walletService.releaseFunds(highestBidderId, refId, holdAmt, `Bidding lot cancelled by seller for "${item.cropName}"`).subscribe();
+      }
       this.biddingService.deleteAuction(item.id).subscribe();
       this.auctions = this.auctions.filter(a => a.id !== item.id);
-      this.toastMsg = `✓ Bidding lot for "${item.cropName}" has been cancelled and removed from live bidding floor.`;
+      this.toastMsg = `✓ Bidding lot for "${item.cropName}" has been cancelled and reserved funds released back to dealer's available balance.`;
       setTimeout(() => this.toastMsg = '', 5000);
     }
   }
@@ -1630,7 +1756,11 @@ export class BiddingComponent implements OnInit, OnDestroy {
       return;
     }
     const uid = String(this.user.id || this.user.userId || 'dealer-1');
-    this.dealerWalletBalance = this.walletService.getStoredBalance(uid);
+    const stored = this.walletService.getStoredWallet(uid);
+    this.dealerWalletBalance = stored.availableBalance;
+    this.dealerReservedBalance = stored.reservedBalance;
+    this.dealerTotalBalance = stored.balance;
+
     this.selectedAuction = item;
     this.userBidPrice = item.bidsCount === 0 ? item.startingPriceKg : +(item.currentBidKg + 0.5).toFixed(2);
     this.onBidPriceChange();
@@ -1688,17 +1818,55 @@ export class BiddingComponent implements OnInit, OnDestroy {
     }
 
     const uid = String(this.user.id || this.user.userId || 'dealer-1');
-    this.dealerWalletBalance = this.walletService.getStoredBalance(uid);
+    const stored = this.walletService.getStoredWallet(uid);
+    this.dealerWalletBalance = stored.availableBalance;
+    this.dealerReservedBalance = stored.reservedBalance;
+    this.dealerTotalBalance = stored.balance;
 
-    if (this.dealerWalletBalance < this.calculatedTotalAmount) {
-      alert(`⚠️ Insufficient Wallet Balance!\n\nTo place a bid for the full lot (${this.selectedAuction.totalQuantityKg} Kg @ ₹${this.userBidPrice}/Kg), you must have at least ₹${this.calculatedTotalAmount.toLocaleString()} in your digital wallet.\nYour Current Balance: ₹${this.dealerWalletBalance.toLocaleString()}.\n\nPlease top up your wallet to bid on this harvest lot.`);
+    const existingHoldInfo = this.walletService.getActiveHoldForAuction(uid, this.selectedAuction.id);
+    const isSameBidderWinning = (this.selectedAuction.highestBidderId && String(this.selectedAuction.highestBidderId) === uid) ||
+      (this.selectedAuction.bidsHistory && this.selectedAuction.bidsHistory.length > 0 && String((this.selectedAuction.bidsHistory[0] as any).dealerId) === uid) ||
+      existingHoldInfo.amount > 0;
+
+    const previousHold = existingHoldInfo.amount > 0
+      ? existingHoldInfo.amount
+      : (isSameBidderWinning ? Math.round((this.selectedAuction.currentBidKg || 0) * this.selectedAuction.totalQuantityKg) : 0);
+
+    const netAdditionalRequired = Math.max(0, this.calculatedTotalAmount - previousHold);
+
+    if (this.dealerWalletBalance < netAdditionalRequired) {
+      alert(`⚠️ Insufficient Available Wallet Balance!\n\nTo place a bid for the full lot (${this.selectedAuction.totalQuantityKg} Kg @ ₹${this.userBidPrice}/Kg = ₹${this.calculatedTotalAmount.toLocaleString()}), you need an unreserved balance of at least ₹${netAdditionalRequired.toLocaleString()}.\n\nYour Current Available Balance: ₹${this.dealerWalletBalance.toLocaleString()}\nFunds Locked in Other Bids: ₹${this.dealerReservedBalance.toLocaleString()}\nTotal Wallet Balance: ₹${this.dealerTotalBalance.toLocaleString()}.\n\nPlease top up your wallet to bid on this harvest lot.`);
       return;
     }
 
+    // 1. If another dealer was previously winning, release all previous bidders on this auction
+    this.walletService.releaseAllBiddersForAuction(this.selectedAuction.id, `Outbid on Lot #${this.selectedAuction.id} (${this.selectedAuction.cropName}) by higher offer`, uid);
+
+    // 2. If this same dealer had a previous hold, release it before re-reserving the new full amount
+    const refId = 'BID-' + this.selectedAuction.id + '-' + uid;
+    if (previousHold > 0) {
+      const oldRef = existingHoldInfo.referenceId || refId;
+      this.walletService.releaseFunds(uid, oldRef, previousHold, `Released previous bid hold for raised bid on Lot #${this.selectedAuction.id} (${this.selectedAuction.cropName})`).subscribe();
+    }
+
+    // 3. Reserve the total lot amount from the bidder's wallet
+    this.walletService.reserveFunds(
+      uid,
+      this.calculatedTotalAmount,
+      refId,
+      `Reserved for live bid on Lot #${this.selectedAuction.id} (${this.selectedAuction.cropName}, ${this.selectedAuction.totalQuantityKg} Kg @ ₹${this.userBidPrice}/Kg)`
+    ).subscribe();
+
+    this.dealerWalletBalance = this.walletService.getStoredAvailableBalance(uid);
+    this.dealerReservedBalance = this.walletService.getStoredReservedBalance(uid);
+    this.dealerTotalBalance = this.walletService.getStoredTotalBalance(uid);
+
     const bidder = this.user?.fullName || this.user?.username || 'Apex Agro Mills Ltd';
     this.selectedAuction.currentBidKg = this.userBidPrice;
+    this.selectedAuction.highestBidderId = uid;
     this.selectedAuction.bidsCount = (this.selectedAuction.bidsCount || 0) + 1;
     this.selectedAuction.bidsHistory.unshift({
+      dealerId: uid,
       bidderName: bidder,
       bidPriceKg: this.userBidPrice,
       bidTime: 'Just now'
@@ -1707,8 +1875,10 @@ export class BiddingComponent implements OnInit, OnDestroy {
     const found = this.auctions.find(a => a.id === this.selectedAuction!.id);
     if (found) {
       found.currentBidKg = this.userBidPrice;
+      found.highestBidderId = uid;
       found.bidsCount = (found.bidsCount || 0) + 1;
       found.bidsHistory.unshift({
+        dealerId: uid,
         bidderName: bidder,
         bidPriceKg: this.userBidPrice,
         bidTime: 'Just now'
