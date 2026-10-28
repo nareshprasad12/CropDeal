@@ -32,4 +32,16 @@ public interface NotificationService {
     List<NotificationResponse> getNotificationsByOrder(
             Long orderId
     );
+
+    List<NotificationResponse> getNotificationsByUser(
+            String userId
+    );
+
+    void markAsRead(Long notificationId);
+
+    void markAllAsRead(String userId);
+
+    void clearAllForUser(String userId);
+
+    void deleteNotification(Long notificationId);
 }

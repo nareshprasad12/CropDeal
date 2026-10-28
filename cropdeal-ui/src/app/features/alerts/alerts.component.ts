@@ -6,6 +6,8 @@ import { Subscription, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { CropService } from '../../core/services/crop.service';
 import { AuthService } from '../../core/services/auth.service';
+import { NotificationService } from '../../core/services/notification.service';
+import { HttpClient } from '@angular/common/http';
 import { AlertService } from '../../core/services/alert.service';
 import { CropAlert } from '../../core/models/crop.model';
 import { User } from '../../core/models/user.model';
@@ -635,18 +637,56 @@ export class AlertsComponent implements OnInit, OnDestroy {
   constructor(
     private authService: AuthService,
     private alertService: AlertService,
-    private cropService: CropService
+    private cropService: CropService,
+    private notificationService: NotificationService,
+    private http: HttpClient
   ) {}
 
   ngOnInit(): void {
     this.subs.push(
       this.authService.currentUser$.subscribe(u => {
         this.user = u;
+        const uid = u?.id || u?.userId;
+        if (uid) {
+          this.http.post(`/api/price-alerts/match/check-on-login/${uid}`, {}).pipe(catchError(() => of(null))).subscribe();
+        }
       }),
       this.alertService.alerts$.subscribe(list => {
         this.alerts = list;
+        this.evaluateAllAlerts();
       })
     );
+    this.refreshMandiRates();
+  }
+
+  evaluateAlert(a: CropAlert): boolean {
+    const cur = Number(a.currentGovPrice || 0);
+    const tgt = Number(a.targetPrice || 0);
+    if (!tgt || !cur) return false;
+    if (a.condition === 'ABOVE' && cur >= tgt) return true;
+    if (a.condition === 'BELOW' && cur <= tgt) return true;
+    return false;
+  }
+
+  evaluateAllAlerts(): void {
+    let changed = false;
+    this.alerts.forEach(a => {
+      const isTriggered = this.evaluateAlert(a);
+      if (isTriggered && a.status !== 'TRIGGERED') {
+        a.status = 'TRIGGERED';
+        a.message = `${a.cropName} APMC market price is ₹${a.currentGovPrice}/Kg, meeting your trigger condition (${a.condition} ₹${a.targetPrice}/Kg)!`;
+        changed = true;
+        this.notificationService.sendNotification(
+          String(this.user?.id || this.user?.userId || a.userId || '1'),
+          `🔔 Price Alert Triggered: ${a.cropName}`,
+          `${a.cropName} market price reached ₹${a.currentGovPrice}/Kg (${a.condition} target of ₹${a.targetPrice}/Kg).`,
+          'PRICE_ALERT'
+        );
+      }
+    });
+    if (changed) {
+      this.alertService.updateAlerts(this.alerts);
+    }
   }
 
   ngOnDestroy(): void {
@@ -710,9 +750,20 @@ export class AlertsComponent implements OnInit, OnDestroy {
       message: `Monitoring ${this.newAlert.cropName} against ₹${this.newAlert.targetPrice}/Kg target rate.`
     };
 
+    if (this.evaluateAlert(item)) {
+      item.status = 'TRIGGERED';
+      item.message = `${item.cropName} APMC market price is ₹${item.currentGovPrice}/Kg, meeting your trigger condition (${item.condition} ₹${item.targetPrice}/Kg)!`;
+      this.notificationService.sendNotification(
+        String(this.user?.id || this.user?.userId || item.userId || '1'),
+        `🔔 Price Alert Triggered: ${item.cropName}`,
+        `${item.cropName} market price reached ₹${item.currentGovPrice}/Kg (${item.condition} target of ₹${item.targetPrice}/Kg).`,
+        'PRICE_ALERT'
+      );
+    }
+
     this.alertService.addAlert(item);
     this.showCreateModal = false;
-    this.actionMsg = `✓ Price trigger for ${item.cropName} created successfully!`;
+    this.actionMsg = `✓ Price trigger for ${item.cropName} created successfully!` + (item.status === 'TRIGGERED' ? ' (Condition satisfied - Alert Triggered!)' : '');
     setTimeout(() => { this.actionMsg = ''; }, 4000);
   }
 

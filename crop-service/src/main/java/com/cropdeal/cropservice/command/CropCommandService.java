@@ -56,16 +56,22 @@ public class CropCommandService {
         Crop saved = cropRepository.save(crop);
         subscriptionService.notifyMatchingSubscribers(saved);
         if (priceAlertClient != null) {
-            priceAlertClient.triggerPriceAlertMatch(
-                    saved.getId(),
-                    saved.getFarmerId(),
-                    saved.getCommodity(),
-                    saved.getPricePerKg(),
-                    saved.getQuantity() != null ? saved.getQuantity().doubleValue() : null,
-                    saved.getUnit(),
-                    saved.getDistrict(),
-                    saved.getState()
-            );
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    priceAlertClient.triggerPriceAlertMatch(
+                            saved.getId(),
+                            saved.getFarmerId(),
+                            saved.getCommodity(),
+                            saved.getPricePerKg(),
+                            saved.getQuantity() != null ? saved.getQuantity().doubleValue() : null,
+                            saved.getUnit(),
+                            saved.getDistrict(),
+                            saved.getState()
+                    );
+                } catch (Exception ex) {
+                    // Suppress asynchronous price alert match errors so crop creation is never blocked
+                }
+            });
         }
         return toResponse(saved);
     }

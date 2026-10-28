@@ -16,7 +16,19 @@ export class NotificationService {
   private notificationsSubject = new BehaviorSubject<AppNotification[]>([]);
   public notifications$ = this.notificationsSubject.asObservable();
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) {
+    // Purge any legacy client-side cached notifications from localStorage
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('cropdeal_notifications')) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch {}
+  }
 
   public resolveRoleBucket(identifier?: string | null): 'farmer' | 'dealer' | 'delivery' | 'admin' | 'guest' {
     if (!identifier) return 'guest';
@@ -41,52 +53,53 @@ export class NotificationService {
     return 'guest';
   }
 
-  public getBucketKey(roleOrId?: string | null): string {
-    const bucket = this.resolveRoleBucket(roleOrId);
-    return `cropdeal_notifications_${bucket}`;
+  private getCurrentUserId(): string | null {
+    try {
+      const stored = localStorage.getItem('cropdeal_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        return String(u.id || u.userId || '');
+      }
+    } catch {}
+    return null;
   }
 
-  private getCurrentUserBucket(): 'farmer' | 'dealer' | 'delivery' | 'admin' | 'guest' {
-    const currentStoredUser = localStorage.getItem('cropdeal_user');
-    if (currentStoredUser) {
-      try {
-        const u = JSON.parse(currentStoredUser);
-        return this.resolveRoleBucket(u.role || u.id || u.userId);
-      } catch {}
-    }
-    return 'guest';
-  }
-
+  /**
+   * Fetches real notifications from the backend Notification Service.
+   * If notification-service is stopped / down, this returns [] and resets the notification count to 0.
+   * No fallback to fake localStorage data is permitted.
+   */
   getUserNotifications(userId: string): Observable<AppNotification[]> {
-    const userBucket = this.getCurrentUserBucket();
-    const bucket = userBucket !== 'guest' ? userBucket : this.resolveRoleBucket(userId);
-    const targetKey = this.getBucketKey(bucket);
-
-    let foundList: AppNotification[] = [];
-    const saved = localStorage.getItem(targetKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          foundList = parsed;
-        }
-      } catch {}
+    if (!userId) {
+      this.notificationsSubject.next([]);
+      this.unreadCountSubject.next(0);
+      return of([]);
     }
 
-    // Always reset active stream to this specific user's bucket (even if empty)
-    this.notificationsSubject.next(foundList);
-    this.unreadCountSubject.next(foundList.filter(n => !n.isRead).length);
-
-    return this.http.get<AppNotification[]>(`${this.baseUrl}/user/${userId}`).pipe(
-      tap(backendNotifications => {
-        if (backendNotifications && Array.isArray(backendNotifications) && backendNotifications.length > 0) {
-          const merged = [...backendNotifications, ...foundList.filter(l => !backendNotifications.some(n => n.id === l.id))];
-          this.notificationsSubject.next(merged);
-          this.unreadCountSubject.next(merged.filter(n => !n.isRead).length);
-          localStorage.setItem(targetKey, JSON.stringify(merged));
-        }
+    return this.http.get<any[]>(`${this.baseUrl}/user/${userId}`).pipe(
+      map(backendList => {
+        if (!backendList || !Array.isArray(backendList)) return [];
+        return backendList.map(b => ({
+          id: String(b.id),
+          userId: String(b.recipient || userId),
+          title: b.type ? b.type.replace(/_/g, ' ') : 'Notification',
+          message: b.message || '',
+          type: (b.type || 'SYSTEM') as any,
+          isRead: b.status === 'READ' || b.read === true || b.isRead === true,
+          createdAt: b.createdAt || new Date().toISOString()
+        }));
       }),
-      catchError(() => of(foundList))
+      tap(mapped => {
+        this.notificationsSubject.next(mapped);
+        this.unreadCountSubject.next(mapped.filter(n => !n.isRead).length);
+      }),
+      catchError(err => {
+        console.warn('Backend notification service unreachable. Resetting notification stream:', err);
+        // Strict requirement: When notification service is stopped, do NOT show fake/cached notifications!
+        this.notificationsSubject.next([]);
+        this.unreadCountSubject.next(0);
+        return of([]);
+      })
     );
   }
 
@@ -100,12 +113,7 @@ export class NotificationService {
       n.id === notificationId ? { ...n, isRead: true } : n
     );
     this.notificationsSubject.next(current);
-    const unread = current.filter(n => !n.isRead).length;
-    this.unreadCountSubject.next(unread);
-
-    const bucket = this.resolveRoleBucket(userId || this.getCurrentUserBucket());
-    const targetKey = this.getBucketKey(bucket);
-    localStorage.setItem(targetKey, JSON.stringify(current));
+    this.unreadCountSubject.next(current.filter(n => !n.isRead).length);
 
     return this.http.put<void>(`${this.baseUrl}/${notificationId}/read`, {}).pipe(
       catchError(() => of(undefined as any))
@@ -115,21 +123,7 @@ export class NotificationService {
   deleteNotification(notificationId: string, userId?: string): Observable<boolean> {
     const updated = this.notificationsSubject.value.filter(n => n.id !== notificationId);
     this.notificationsSubject.next(updated);
-    const unread = updated.filter(n => !n.isRead).length;
-    this.unreadCountSubject.next(unread);
-
-    const bucket = this.resolveRoleBucket(userId || this.getCurrentUserBucket());
-    const targetKey = this.getBucketKey(bucket);
-    const saved = localStorage.getItem(targetKey);
-    if (saved) {
-      try {
-        const list = JSON.parse(saved);
-        if (Array.isArray(list)) {
-          const purged = list.filter((n: any) => n.id !== notificationId);
-          localStorage.setItem(targetKey, JSON.stringify(purged));
-        }
-      } catch {}
-    }
+    this.unreadCountSubject.next(updated.filter(n => !n.isRead).length);
 
     return this.http.delete<void>(`${this.baseUrl}/${notificationId}`).pipe(
       map(() => true),
@@ -142,48 +136,37 @@ export class NotificationService {
     this.notificationsSubject.next(current);
     this.unreadCountSubject.next(0);
 
-    const bucket = this.resolveRoleBucket(userId || this.getCurrentUserBucket());
-    const targetKey = this.getBucketKey(bucket);
-    localStorage.setItem(targetKey, JSON.stringify(current));
-
-    this.http.put(`${this.baseUrl}/user/${userId || 'me'}/read-all`, {}).pipe(
+    const uid = userId || this.getCurrentUserId() || 'me';
+    this.http.put(`${this.baseUrl}/user/${uid}/read-all`, {}).pipe(
       catchError(() => of(null))
     ).subscribe();
   }
 
   clearAllNotifications(userId?: string): void {
-    const bucket = this.resolveRoleBucket(userId || this.getCurrentUserBucket());
-    const targetKey = this.getBucketKey(bucket);
-    localStorage.removeItem(targetKey);
-
     this.notificationsSubject.next([]);
     this.unreadCountSubject.next(0);
 
-    this.http.delete(`${this.baseUrl}/user/${userId || 'me'}/clear-all`).pipe(
+    const uid = userId || this.getCurrentUserId() || 'me';
+    this.http.delete(`${this.baseUrl}/user/${uid}/clear-all`).pipe(
       catchError(() => of(null))
     ).subscribe();
   }
 
+  /**
+   * For backwards compatibility: routes through asynchronous RabbitMQ notification flow
+   */
   addClientNotification(notification: AppNotification, userId?: string): void {
-    const targetBucket = this.resolveRoleBucket(userId || notification.userId);
-    const targetKey = this.getBucketKey(targetBucket);
-
-    let list: AppNotification[] = [];
-    const saved = localStorage.getItem(targetKey);
-    if (saved) {
-      try { list = JSON.parse(saved); } catch {}
-    }
-    list = [notification, ...list.filter(n => n.id !== notification.id)];
-    localStorage.setItem(targetKey, JSON.stringify(list));
-
-    if (this.getCurrentUserBucket() === targetBucket) {
-      const current = [notification, ...this.notificationsSubject.value.filter(n => n.id !== notification.id)];
-      this.notificationsSubject.next(current);
-      const unread = current.filter(n => !n.isRead).length;
-      this.unreadCountSubject.next(unread);
-    }
+    this.sendNotification(
+      userId || notification.userId,
+      notification.title,
+      notification.message,
+      notification.type as any
+    );
   }
 
+  /**
+   * Sends a notification asynchronously through the Notification Service backend & RabbitMQ.
+   */
   sendNotification(
     userId: string,
     title: string,
@@ -191,48 +174,25 @@ export class NotificationService {
     type: 'ORDER' | 'NEGOTIATION' | 'BID' | 'PRICE_ALERT' | 'WALLET' | 'DELIVERY' | 'SYSTEM',
     targetRole?: 'farmer' | 'dealer' | 'delivery' | 'admin'
   ): void {
-    const notif: AppNotification = {
-      id: 'notif-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-      userId,
-      title,
-      message,
-      type,
-      isRead: false,
-      createdAt: new Date().toISOString()
-    };
-
-    const targetBucket = targetRole || this.resolveRoleBucket(userId);
-    const targetKey = this.getBucketKey(targetBucket);
-
-    // Persist into user-specific bucket
-    let list: AppNotification[] = [];
-    const saved = localStorage.getItem(targetKey);
-    if (saved) {
-      try { list = JSON.parse(saved); } catch {}
-    }
-    list = [notif, ...list.filter(n => n.id !== notif.id)];
-    localStorage.setItem(targetKey, JSON.stringify(list));
-
-    // Dispatch to Backend notification-service so RabbitMQ topic exchange publishes the message
-    this.http.post(`${this.baseUrl}`, {
+    const payload = {
       recipient: userId,
       type: type || 'SYSTEM',
       message: `${title}: ${message}`
-    }).pipe(
+    };
+
+    // Dispatch to Backend notification-service so RabbitMQ topic exchange publishes the message
+    this.http.post(`${this.baseUrl}`, payload).pipe(
       catchError(err => {
-        console.warn('RabbitMQ notification backend dispatch notice:', err);
+        console.warn('RabbitMQ notification backend dispatch warning:', err);
         return of(null);
       })
-    ).subscribe();
-
-    // STRICT USER ISOLATION:
-    // Update live notificationsSubject ONLY if currently logged-in user belongs to targetBucket
-    const currentBucket = this.getCurrentUserBucket();
-    if (currentBucket === targetBucket) {
-      const combined = [notif, ...this.notificationsSubject.value.filter(n => n.id !== notif.id)];
-      this.notificationsSubject.next(combined);
-      const unread = combined.filter(n => !n.isRead).length;
-      this.unreadCountSubject.next(unread);
-    }
+    ).subscribe({
+      next: () => {
+        const currentUserId = this.getCurrentUserId();
+        if (currentUserId && (currentUserId === String(userId) || userId === 'ALL')) {
+          this.getUserNotifications(currentUserId).subscribe();
+        }
+      }
+    });
   }
 }

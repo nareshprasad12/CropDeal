@@ -1966,14 +1966,16 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
   }
 
   loadNegotiations(): void {
-    this.items = this.loadStoredNegotiations();
+    try {
+      localStorage.removeItem(this.NEGOTIATIONS_KEY);
+    } catch {}
 
     if (this.user?.id || this.user?.userId) {
       const uid = String(this.user.id || this.user.userId!);
       this.negotiationService.getNegotiationsByUser(uid).subscribe({
         next: (serverList) => {
           if (serverList && serverList.length > 0) {
-            const mappedServerItems: UINegotiationItem[] = serverList.map(sn => ({
+            this.items = serverList.map(sn => ({
               id: sn.id,
               cropName: sn.cropName,
               grade: 'Grade A',
@@ -1996,36 +1998,25 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
               farmerName: sn.farmerName || 'Farmer Partner',
               updatedAt: sn.updatedAt || new Date().toISOString()
             }));
-
-            const merged = [...mappedServerItems];
-            this.items.forEach(it => {
-              if (!merged.some(m => String(m.id) === String(it.id))) {
-                merged.push(it);
-              }
-            });
-            this.items = merged;
-            this.saveNegotiations();
+          } else {
+            this.items = [];
           }
         },
-        error: () => {}
+        error: () => {
+          this.items = [];
+        }
       });
+    } else {
+      this.items = [];
     }
   }
 
   private loadStoredNegotiations(): UINegotiationItem[] {
-    const raw = localStorage.getItem(this.NEGOTIATIONS_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch {}
-    }
-    // Only return empty if truly nothing created, but provide seamless experience
     return [];
   }
 
   private saveNegotiations(): void {
-    localStorage.setItem(this.NEGOTIATIONS_KEY, JSON.stringify(this.items));
+    // Strictly backend managed state to eliminate duplicate rows
   }
 
   setTab(tab: 'ALL' | 'PENDING' | 'ACCEPTED' | 'REJECTED'): void {
@@ -2215,21 +2206,37 @@ export class NegotiationsComponent implements OnInit, OnDestroy {
     this.saveNegotiations();
     this.negotiationService.counterOffer(this.activeCounterItem.id, this.counterPriceInput, this.counterNoteInput, actorId).subscribe();
 
-    const dealerId = this.activeCounterItem.dealerId || 'dealer-1';
-    const farmerId = this.activeCounterItem.farmerId || 'farmer-1';
+    const dealerId = String(this.activeCounterItem.dealerId || '2').replace(/\D/g, '') || '2';
+    const farmerId = String(this.activeCounterItem.farmerId || '1').replace(/\D/g, '') || '1';
 
     if (this.isDealer) {
+      // 1. Send notification to Farmer
       this.notificationService.sendNotification(
         farmerId,
         '💬 Dealer Counter Proposal',
         `Dealer ${this.activeCounterItem.dealerName} proposed ₹${this.counterPriceInput}/Kg for ${this.activeCounterItem.cropName}.`,
         'NEGOTIATION'
       );
+      // 2. Send confirmation to Dealer
+      this.notificationService.sendNotification(
+        dealerId,
+        '💬 Counter Proposal Submitted',
+        `Your counter proposal of ₹${this.counterPriceInput}/Kg for ${this.activeCounterItem.cropName} was sent to Farmer ${this.activeCounterItem.farmerName}.`,
+        'NEGOTIATION'
+      );
     } else {
+      // 1. Send notification to Dealer
       this.notificationService.sendNotification(
         dealerId,
         '💬 Farmer Counter Proposal',
         `Farmer ${this.activeCounterItem.farmerName} submitted a counter proposal of ₹${this.counterPriceInput}/Kg for ${this.activeCounterItem.cropName}.`,
+        'NEGOTIATION'
+      );
+      // 2. Send confirmation to Farmer
+      this.notificationService.sendNotification(
+        farmerId,
+        '💬 Counter Proposal Submitted',
+        `Your counter proposal of ₹${this.counterPriceInput}/Kg for ${this.activeCounterItem.cropName} was sent to Dealer ${this.activeCounterItem.dealerName}.`,
         'NEGOTIATION'
       );
     }

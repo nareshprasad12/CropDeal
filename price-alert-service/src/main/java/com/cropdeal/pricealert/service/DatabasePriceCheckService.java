@@ -4,6 +4,9 @@ import com.cropdeal.pricealert.client.PriceServiceClient;
 import com.cropdeal.pricealert.dto.DatabasePriceDto;
 import com.cropdeal.pricealert.dto.MatchMarketPriceRequest;
 import com.cropdeal.pricealert.dto.MatchResultResponse;
+import com.cropdeal.pricealert.entity.PriceAlertSubscription;
+import com.cropdeal.pricealert.repository.PriceAlertSubscriptionRepository;
+import com.cropdeal.pricealert.repository.PriceAlertNotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,6 +15,8 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +25,8 @@ public class DatabasePriceCheckService {
 
     private final PriceServiceClient priceServiceClient;
     private final PriceAlertMatchingEngine matchingEngine;
+    private final PriceAlertSubscriptionRepository subscriptionRepository;
+    private final PriceAlertNotificationRepository notificationRepository;
 
     /**
      * Checks all active subscriptions against the government/market prices stored in our local DB.
@@ -100,7 +107,21 @@ public class DatabasePriceCheckService {
                     .build();
         }
 
-        log.info("Checking crop alerts from local database for userId {} on login...", userId);
+        List<PriceAlertSubscription> userSubs = subscriptionRepository.findByUserIdAndActiveTrue(userId);
+        if (userSubs == null || userSubs.isEmpty()) {
+            return MatchResultResponse.builder()
+                    .matchedCount(0)
+                    .notificationsTriggered(0)
+                    .message("No active price subscriptions found for user " + userId)
+                    .build();
+        }
+
+        Set<String> subscribedCrops = userSubs.stream()
+                .filter(s -> s.getCropName() != null && !s.getCropName().isBlank())
+                .map(s -> s.getCropName().trim().toLowerCase())
+                .collect(Collectors.toSet());
+
+        log.info("Checking crop alerts from local database for userId {} on login (subscribed to: {})...", userId, subscribedCrops);
 
         List<DatabasePriceDto> dbPrices = priceServiceClient.getLatestStoredPricesFromDb();
         if (dbPrices == null || dbPrices.isEmpty()) {
@@ -116,8 +137,23 @@ public class DatabasePriceCheckService {
         int totalTriggered = 0;
         long syntheticId = 1000L;
 
+        java.util.Set<Long> notifiedSubs = new java.util.HashSet<>();
         for (DatabasePriceDto priceDto : dbPrices) {
             if (priceDto.getCommodity() == null || priceDto.getCommodity().isBlank()) {
+                continue;
+            }
+
+            // High performance filter: evaluate only prices matching the user's subscribed crops
+            if (!subscribedCrops.contains(priceDto.getCommodity().trim().toLowerCase())) {
+                continue;
+            }
+
+            List<PriceAlertSubscription> pendingSubs = userSubs.stream()
+                    .filter(s -> !notifiedSubs.contains(s.getId()) && s.getLastNotifiedAt() == null && !notificationRepository.existsBySubscriptionId(s.getId()))
+                    .filter(s -> s.getCropName() != null && s.getCropName().trim().equalsIgnoreCase(priceDto.getCommodity().trim()))
+                    .toList();
+
+            if (pendingSubs.isEmpty()) {
                 continue;
             }
 
@@ -145,12 +181,15 @@ public class DatabasePriceCheckService {
                     .unit("kg")
                     .build();
 
-            int matched = matchingEngine.matchUserSubscriptionsAgainstMarketPrice(userId, matchRequest);
+            int matched = matchingEngine.matchUserSubscriptionsAgainstMarketPrice(userId, matchRequest, pendingSubs);
+            if (matched > 0) {
+                pendingSubs.forEach(s -> notifiedSubs.add(s.getId()));
+            }
             totalEvaluated++;
             totalTriggered += matched;
         }
 
-        String msg = String.format("Evaluated %d database crop prices for user %d on login. New alerts triggered: %d",
+        String msg = String.format("Evaluated %d matching database crop prices for user %d on login. New alerts triggered: %d",
                 totalEvaluated, userId, totalTriggered);
         log.info(msg);
 

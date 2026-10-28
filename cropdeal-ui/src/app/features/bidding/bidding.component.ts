@@ -1710,14 +1710,17 @@ export class BiddingComponent implements OnInit, OnDestroy {
       });
 
       // 7. Notify highest bidder (dealer) and farmer
+      const cleanDealerUid = String(dealerUid).replace(/\D/g, '') || '2';
+      const cleanFarmerUid = String(farmerUid).replace(/\D/g, '') || '1';
+
       this.notificationService.sendNotification(
-        dealerUid,
+        cleanDealerUid,
         '🏆 Auction Won & Finalized!',
         `Congratulations! You won the bidding floor for "${item.cropName}" (${item.totalQuantityKg} kg) at ₹${highestBid}/kg from farmer ${item.farmerName}. Order #${orderId} created and ₹${fullStockTotal.toLocaleString()} debited from your wallet.`,
         'BID'
       );
       this.notificationService.sendNotification(
-        farmerUid,
+        cleanFarmerUid,
         '🤝 Auction Floor Closed & Settled',
         `Your live auction for "${item.cropName}" (${item.totalQuantityKg} kg) was awarded to highest bidder ${highestBidder} at ₹${highestBid}/kg. ₹${fullStockTotal.toLocaleString()} credited to your wallet.`,
         'BID'
@@ -1912,8 +1915,8 @@ export class BiddingComponent implements OnInit, OnDestroy {
     });
 
     // Send notifications to Farmer and Dealer
-    const farmerId = closedAuction.farmerId || 'farmer-1';
-    const dealerId = this.user?.id || this.user?.userId || 'dealer-1';
+    const farmerId = String(closedAuction.farmerId || '1').replace(/\D/g, '') || '1';
+    const dealerId = String(this.user?.id || this.user?.userId || '2').replace(/\D/g, '') || '2';
 
     this.notificationService.sendNotification(
       farmerId,

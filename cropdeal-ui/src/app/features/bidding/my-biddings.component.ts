@@ -1558,14 +1558,17 @@ export class MyBiddingsComponent implements OnInit, OnDestroy {
     }
 
     // 6. Send in-app notifications
+    const cleanDealerUid = String(dealerUid).replace(/\D/g, '') || '2';
+    const cleanFarmerUid = String(farmerUid).replace(/\D/g, '') || '1';
+
     this.notificationService.sendNotification(
-      dealerUid,
+      cleanDealerUid,
       '🏆 Auction Deal Finalized!',
       `Farmer ${auction.farmerName || 'Farmer'} accepted your winning bid of ₹${auction.currentHighestBid}/Kg for Lot #${auction.id} (${auction.cropName}). Order #${orderId} created and ₹${fullStockTotal.toLocaleString()} debited from your wallet.`,
       'BID'
     );
     this.notificationService.sendNotification(
-      farmerUid,
+      cleanFarmerUid,
       '🤝 Bidding Lot Awarded & Settled',
       `You accepted the winning bid of ₹${auction.currentHighestBid}/Kg from ${auction.highestBidderName} for Lot #${auction.id}. ₹${fullStockTotal.toLocaleString()} credited to your digital wallet.`,
       'BID'

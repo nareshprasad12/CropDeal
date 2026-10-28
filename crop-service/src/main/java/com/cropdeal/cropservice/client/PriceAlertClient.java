@@ -20,7 +20,7 @@ public class PriceAlertClient {
     private final String priceAlertServiceUrl;
 
     public PriceAlertClient(RestClient restClient,
-                            @Value("${crop-service.price-alert-service-url:http://localhost:8094}") String priceAlertServiceUrl) {
+                            @Value("${crop-service.price-alert-service-url:${CROP_SERVICE_PRICE_ALERT_SERVICE_URL:http://price-alert-service:8094}}") String priceAlertServiceUrl) {
         this.restClient = restClient;
         this.priceAlertServiceUrl = priceAlertServiceUrl;
     }

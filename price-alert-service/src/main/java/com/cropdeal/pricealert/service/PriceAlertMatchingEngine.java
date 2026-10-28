@@ -211,9 +211,13 @@ public class PriceAlertMatchingEngine {
 
         int count = 0;
         for (PriceAlertSubscription sub : subscriptions) {
+            // Strictly enforce single alert per subscription to prevent flooding RabbitMQ queue
+            if (sub.getLastNotifiedAt() != null || notificationRepository.existsBySubscriptionId(sub.getId())) {
+                continue;
+            }
+
             if (evaluatePriceCondition(sub.getPriceCondition(), sub.getTargetPrice(), request.getMarketPrice())) {
-                boolean alreadyNotified = notificationRepository.existsBySubscriptionIdAndSourceTypeAndSourceId(
-                        sub.getId(), AlertSourceType.MARKET_PRICE, request.getPriceId());
+                boolean alreadyNotified = notificationRepository.existsBySubscriptionId(sub.getId());
 
                 if (!alreadyNotified) {
                     String cropDisplay = capitalize(request.getCropName());
@@ -273,15 +277,27 @@ public class PriceAlertMatchingEngine {
      */
     @Transactional
     public int matchUserSubscriptionsAgainstMarketPrice(Long userId, MatchMarketPriceRequest request) {
+        return matchUserSubscriptionsAgainstMarketPrice(userId, request, null);
+    }
+
+    @Transactional
+    public int matchUserSubscriptionsAgainstMarketPrice(Long userId, MatchMarketPriceRequest request, List<PriceAlertSubscription> userSubscriptions) {
         if (request == null || request.getCropName() == null || request.getMarketPrice() == null || userId == null) {
             return 0;
         }
 
         String cropName = request.getCropName().trim().toLowerCase();
-        List<PriceAlertSubscription> userSubscriptions = subscriptionRepository.findByUserIdAndActiveTrue(userId);
+        if (userSubscriptions == null) {
+            userSubscriptions = subscriptionRepository.findByUserIdAndActiveTrue(userId);
+        }
 
         int count = 0;
         for (PriceAlertSubscription sub : userSubscriptions) {
+            // Strictly enforce single alert per subscription on login to prevent 260+ queue events
+            if (sub.getLastNotifiedAt() != null || notificationRepository.existsBySubscriptionId(sub.getId())) {
+                continue;
+            }
+
             if (!sub.getCropName().trim().equalsIgnoreCase(cropName)) {
                 continue;
             }
@@ -292,8 +308,7 @@ public class PriceAlertMatchingEngine {
             }
 
             if (evaluatePriceCondition(sub.getPriceCondition(), sub.getTargetPrice(), request.getMarketPrice())) {
-                boolean alreadyNotified = notificationRepository.existsBySubscriptionIdAndSourceTypeAndSourceId(
-                        sub.getId(), AlertSourceType.MARKET_PRICE, request.getPriceId());
+                boolean alreadyNotified = notificationRepository.existsBySubscriptionId(sub.getId());
 
                 if (!alreadyNotified) {
                     String cropDisplay = capitalize(request.getCropName());

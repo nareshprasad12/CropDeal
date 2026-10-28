@@ -119,13 +119,13 @@ import { User } from '../../core/models/user.model';
               <div class="claim-header">
                 <div>
                   <span class="tracking-tag"><i class="fa-solid fa-barcode"></i> {{ item.trackingNumber }}</span>
-                  <h4 class="crop-title">{{ item.cropName }} ({{ item.cropQuantity }} {{ item.cropUnit }})</h4>
+                  <h4 class="crop-title">{{ item.cropName || 'Produce Crop' }}<span *ngIf="item.cropQuantity"> ({{ item.cropQuantity }} {{ item.cropUnit || 'KG' }})</span></h4>
                   <span class="order-ref">Order Ref: #{{ item.orderId }}</span>
                 </div>
                 <div class="payout-badge">
                   <span class="payout-lbl">Guaranteed Payout</span>
-                  <h3 class="payout-amount text-emerald">₹{{ item.deliveryFee }}</h3>
-                  <small>{{ item.distanceKm }} km &#64; ₹10/km</small>
+                  <h3 class="payout-amount text-emerald">₹{{ getDeliveryFee(item) }}</h3>
+                  <small>{{ getDistanceKm(item) }} km &#64; ₹10/km</small>
                 </div>
               </div>
 
@@ -158,7 +158,7 @@ import { User } from '../../core/models/user.model';
 
               <div class="claim-footer mt-3">
                 <div class="meta-sub">
-                  <i class="fa-solid fa-road"></i> Distance: <strong>{{ item.distanceKm }} km</strong>
+                  <i class="fa-solid fa-road"></i> Distance: <strong>{{ getDistanceKm(item) }} km</strong>
                 </div>
                 <button class="btn btn-primary" (click)="takeOrder(item)">
                   <i class="fa-solid fa-truck-pickup"></i> Accept / Take Order
@@ -181,11 +181,11 @@ import { User } from '../../core/models/user.model';
               <div class="del-header">
                 <div>
                   <span class="tracking-code"><i class="fa-solid fa-barcode"></i> {{ item.trackingNumber }}</span>
-                  <span class="order-ref">Order: #{{ item.orderId }} &bull; {{ item.cropName }} ({{ item.cropQuantity }} {{ item.cropUnit }})</span>
+                  <span class="order-ref">Order: #{{ item.orderId }} &bull; {{ item.cropName || 'Produce Crop' }}<span *ngIf="item.cropQuantity"> ({{ item.cropQuantity }} {{ item.cropUnit || 'KG' }})</span></span>
                 </div>
                 <div class="del-status-group">
                   <span class="badge" [ngClass]="getBadgeClass(item.status)">{{ item.status }}</span>
-                  <span class="fee-pill">₹{{ item.deliveryFee }} payout</span>
+                  <span class="fee-pill">₹{{ getDeliveryFee(item) }} payout</span>
                 </div>
               </div>
 
@@ -261,7 +261,7 @@ import { User } from '../../core/models/user.model';
                     *ngIf="item.status === 'IN_TRANSIT'"
                     class="btn btn-success btn-sm complete-btn"
                     (click)="advanceStatus(item, 'DELIVERED')">
-                    <i class="fa-solid fa-circle-check"></i> Complete Delivery (Credit ₹{{ item.deliveryFee }} to Wallet)
+                    <i class="fa-solid fa-circle-check"></i> Complete Delivery (Credit ₹{{ getDeliveryFee(item) }} to Wallet)
                   </button>
                 </div>
               </div>
@@ -285,7 +285,7 @@ import { User } from '../../core/models/user.model';
                   <span class="order-ref">Order: #{{ item.orderId }} &bull; {{ item.cropName }}</span>
                 </div>
                 <div class="payout-credited-badge">
-                  <i class="fa-solid fa-wallet"></i> +₹{{ item.deliveryFee }} Credited
+                  <i class="fa-solid fa-wallet"></i> +₹{{ getDeliveryFee(item) }} Credited
                 </div>
               </div>
 
@@ -295,7 +295,7 @@ import { User } from '../../core/models/user.model';
               </div>
               <div class="meta-row mt-2">
                 <span>Route: {{ item.pickupAddress || 'Farm Mandi Gate' }} &rarr; {{ item.dropAddress || 'Dealer Mandi Facility' }}</span>
-                <span>Distance: <strong>{{ item.distanceKm }} km</strong></span>
+                <span>Distance: <strong>{{ getDistanceKm(item) }} km</strong></span>
               </div>
             </div>
           </div>
@@ -414,7 +414,7 @@ import { User } from '../../core/models/user.model';
                   <i class="fa-solid fa-truck-moving"></i> Logistics Partner:
                   <strong>{{ item.partnerName || 'Kisan Express Agro Logistics' }}</strong>
                 </span>
-                <span class="fee-pill">Fee: ₹{{ item.deliveryFee }} ({{ item.distanceKm }} km)</span>
+                <span class="fee-pill">Fee: ₹{{ getDeliveryFee(item) }} ({{ getDistanceKm(item) }} km)</span>
               </div>
             </div>
           </div>
@@ -459,7 +459,7 @@ import { User } from '../../core/models/user.model';
                 </div>
                 <div class="badges-row">
                   <span class="badge" [ngClass]="item.fulfillmentType === 'SELF_PICKUP' ? 'badge-success' : 'badge-primary'">
-                    {{ item.fulfillmentType === 'SELF_PICKUP' ? 'Self Pickup (₹0)' : 'Delivery Partner (₹' + item.deliveryFee + ')' }}
+                    {{ item.fulfillmentType === 'SELF_PICKUP' ? 'Self Pickup (₹0)' : 'Delivery Partner (₹' + getDeliveryFee(item) + ')' }}
                   </span>
                   <span class="badge" [ngClass]="getBadgeClass(item.status)">{{ item.status }}</span>
                 </div>
@@ -829,20 +829,36 @@ export class DeliveriesComponent implements OnInit {
   }
 
   get poolDeliveries(): Delivery[] {
-    return this.allDeliveries.filter(d => d.status === 'PENDING_ASSIGNMENT' && d.fulfillmentType !== 'SELF_PICKUP');
+    return this.allDeliveries.filter(d =>
+      d.fulfillmentType !== 'SELF_PICKUP' &&
+      d.status !== 'SELF_PICKUP' &&
+      (d.status === 'PENDING_ASSIGNMENT' || d.status === 'AVAILABLE_FOR_PICKUP') &&
+      (!d.partnerId || d.partnerId === 'null' || d.partnerId === '')
+    );
   }
 
   get myActiveDeliveries(): Delivery[] {
-    const partnerId = this.currentUser?.id || this.currentUser?.userId || 'delivery_partner-1';
+    const partnerId = String(this.currentUser?.id || this.currentUser?.userId || '3');
+    const partnerName = (this.currentUser?.fullName || '').trim().toLowerCase();
     return this.allDeliveries.filter(d =>
+      d.fulfillmentType !== 'SELF_PICKUP' &&
+      d.status !== 'SELF_PICKUP' &&
       d.status !== 'PENDING_ASSIGNMENT' &&
+      d.status !== 'AVAILABLE_FOR_PICKUP' &&
       d.status !== 'DELIVERED' &&
-      (d.partnerId === partnerId || !d.partnerId)
+      d.status !== 'CANCELLED' &&
+      (String(d.partnerId) === partnerId || (partnerName && d.partnerName && d.partnerName.toLowerCase().includes(partnerName)))
     );
   }
 
   get completedDeliveries(): Delivery[] {
-    return this.allDeliveries.filter(d => d.status === 'DELIVERED');
+    const partnerId = String(this.currentUser?.id || this.currentUser?.userId || '3');
+    const partnerName = (this.currentUser?.fullName || '').trim().toLowerCase();
+    return this.allDeliveries.filter(d =>
+      d.fulfillmentType !== 'SELF_PICKUP' &&
+      d.status === 'DELIVERED' &&
+      (String(d.partnerId) === partnerId || (partnerName && d.partnerName && d.partnerName.toLowerCase().includes(partnerName)))
+    );
   }
 
   get dealerDeliveries(): Delivery[] {
@@ -884,17 +900,45 @@ export class DeliveriesComponent implements OnInit {
     return this.allDeliveries.filter(d => d.status === 'DELIVERED');
   }
 
+
+  getDistanceKm(item: Delivery): number {
+    if (item && item.distanceKm && Number(item.distanceKm) > 0) {
+      return Number(item.distanceKm);
+    }
+    if (item && item.deliveryFee && Number(item.deliveryFee) > 0) {
+      const calculatedKm = Math.round(Number(item.deliveryFee) / 10);
+      item.distanceKm = calculatedKm;
+      return calculatedKm;
+    }
+    const est = this.deliveryService.estimateDistanceKm(item?.pickupAddress, item?.dropAddress);
+    if (item) item.distanceKm = est;
+    return est;
+  }
+
+  getDeliveryFee(item: Delivery): number {
+    if (item && item.deliveryFee && Number(item.deliveryFee) > 0) {
+      return Number(item.deliveryFee);
+    }
+    const dist = this.getDistanceKm(item);
+    const fee = dist * 10;
+    if (item) item.deliveryFee = fee;
+    return fee;
+  }
+
   takeOrder(item: Delivery): void {
-    const partnerId = this.currentUser?.id || this.currentUser?.userId || 'delivery_partner-1';
+    const partnerId = String(this.currentUser?.id || this.currentUser?.userId || '3');
     const partnerName = this.currentUser?.fullName || 'Kisan Express Agro Logistics';
 
     this.deliveryService.claimDelivery(item.id, partnerId, partnerName).subscribe(() => {
+      item.status = 'ASSIGNED';
       this.activeTab = 'ACTIVE';
       this.showAlert(`Order #${item.orderId} accepted! Assigned to your trip. Ready for pickup at ${item.pickupAddress}.`);
-      this.orderService.updateOrderStatus(item.orderId, 'ASSIGNED').subscribe();
+      const cleanOrderId = String(item.orderId || '').replace(/\D/g, '') || '1';
+      this.orderService.updateOrderStatus(cleanOrderId, 'ASSIGNED').subscribe();
+      this.deliveryService.refreshFromBackend();
 
       // Notify dealer
-      const dealerId = item.dealerId || 'dealer-1';
+      const dealerId = String(item.dealerId || '2').replace(/\D/g, '') || '2';
       this.notificationService.sendNotification(
         dealerId,
         '🚚 Carrier Assigned',
@@ -906,11 +950,15 @@ export class DeliveriesComponent implements OnInit {
 
   advanceStatus(item: Delivery, nextStatus: 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED'): void {
     this.deliveryService.updateDeliveryStatus(item.id, nextStatus).subscribe(() => {
-      const dealerId = item.dealerId || 'dealer-1';
+      item.status = nextStatus;
+      const dealerId = String(item.dealerId || '2').replace(/\D/g, '') || '2';
+      const cleanOrderId = String(item.orderId || '').replace(/\D/g, '') || '1';
 
       if (nextStatus === 'DELIVERED') {
         const partnerId = this.currentUser?.id || this.currentUser?.userId || 'delivery_partner-1';
-        const fee = item.deliveryFee || (item.distanceKm ? item.distanceKm * 10 : 250);
+        const fee = this.getDeliveryFee(item);
+        item.deliveryFee = fee;
+        item.distanceKm = this.getDistanceKm(item);
 
         // Credit fee to delivery partner's wallet
         this.walletService.creditWallet(
@@ -923,7 +971,7 @@ export class DeliveriesComponent implements OnInit {
         });
 
         // Update corresponding order status to DELIVERED so receipt download is unlocked
-        this.orderService.updateOrderStatus(item.orderId, 'DELIVERED').subscribe();
+        this.orderService.updateOrderStatus(cleanOrderId, 'DELIVERED').subscribe();
 
         // Send real-time notifications to dealer
         this.notificationService.sendNotification(
@@ -934,17 +982,17 @@ export class DeliveriesComponent implements OnInit {
         );
       } else if (nextStatus === 'PICKED_UP') {
         this.showAlert(`Order #${item.orderId} marked as PICKED UP from farmer.`);
-        this.orderService.updateOrderStatus(item.orderId, 'PICKED_UP').subscribe();
+        this.orderService.updateOrderStatus(cleanOrderId, 'PICKED_UP').subscribe();
 
         this.notificationService.sendNotification(
           dealerId,
           '🚚 Produce Picked Up from Farm Gate',
-          `Your order #${item.orderId} (${item.cropName}) has been picked up from farmer ${item.farmerName != null ? item.farmerName : 'null'}.`,
+          `Your order #${item.orderId} (${item.cropName}) has been picked up from farmer ${item.farmerName != null ? item.farmerName : 'the farmer'}.`,
           'DELIVERY'
         );
       } else if (nextStatus === 'IN_TRANSIT') {
         this.showAlert(`Order #${item.orderId} is now IN TRANSIT to commercial warehouse.`);
-        this.orderService.updateOrderStatus(item.orderId, 'IN_TRANSIT').subscribe();
+        this.orderService.updateOrderStatus(cleanOrderId, 'IN_TRANSIT').subscribe();
 
         this.notificationService.sendNotification(
           dealerId,
@@ -953,6 +1001,8 @@ export class DeliveriesComponent implements OnInit {
           'DELIVERY'
         );
       }
+
+      this.deliveryService.refreshFromBackend();
     });
   }
 

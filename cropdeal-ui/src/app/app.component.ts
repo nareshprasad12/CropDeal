@@ -12,7 +12,7 @@ export class AppComponent implements OnInit {
   title = 'cropdeal-ui';
 
   ngOnInit(): void {
-    const CLEAN_KEY = 'cropdeal_zero_seed_clean_v5';
+    const CLEAN_KEY = 'cropdeal_zero_seed_clean_v6';
     if (!localStorage.getItem(CLEAN_KEY)) {
       localStorage.removeItem('cropdeal_farmer_reviews');
       localStorage.removeItem('cropdeal_reviews');

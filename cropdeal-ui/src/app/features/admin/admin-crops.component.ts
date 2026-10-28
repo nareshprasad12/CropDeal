@@ -297,6 +297,7 @@ export class AdminCropsComponent implements OnInit {
   }
 
   loadCrops(): void {
+    this.cropService.crops$.subscribe(data => { if (data && data.length > 0) this.crops = data; });
     this.cropService.getAllCrops().subscribe({
       next: (data) => {
         this.crops = data || [];

@@ -2028,8 +2028,8 @@ export class CropListComponent implements OnInit {
     });
 
     // Send real-time in-app notifications to Dealer and Farmer
-    const dealerId = this.user?.id || this.user?.userId || 'dealer-1';
-    const farmerId = crop.farmerId || 'farmer-1';
+    const dealerId = String(this.user?.id || this.user?.userId || '2').replace(/\D/g, '') || '2';
+    const farmerId = String(crop.farmerId || '1').replace(/\D/g, '') || '1';
     const dealerName = this.user?.fullName || this.user?.username || 'Commercial Dealer';
     const farmerName = crop.farmerName || 'Farmer';
 
@@ -2107,54 +2107,22 @@ export class CropListComponent implements OnInit {
       alert(`Proposed negotiation price (₹${this.proposedPrice}) must be lower than original listed price of ₹${crop.pricePerUnit}/${crop.unit || 'Kg'}.`);
       return;
     }
-    const dealerId = this.user.id || this.user.userId || 'dealer-1';
-    const farmerId = crop.farmerId || 'farmer-1';
+    const dealerId = String(this.user.id || this.user.userId || '2').replace(/\D/g, '') || '2';
+    const farmerId = String(crop.farmerId || '1').replace(/\D/g, '') || '1';
     const dealerName = this.user.fullName || this.user.username || 'Apex Agro Mills Ltd';
     const farmerName = crop.farmerName || 'Sardar Gurpreet Singh';
-
-    // Persist new negotiation into localStorage for dynamic table display
-    const newNeg: any = {
-      id: Date.now(),
-      cropId: String(crop.id || crop.cropId || ''),
-      cropName: crop.cropName,
-      grade: crop.cropType || 'Grade A',
-      quantity: `${crop.quantity !== undefined ? crop.quantity : (crop.availableQuantity || 100)} ${crop.unit || 'Kg'}`,
-      availableStock: crop.quantity !== undefined ? crop.quantity : (crop.availableQuantity || 100),
-      img: crop.imageUrl || this.getCropImage(crop.cropName),
-      dealerName: dealerName,
-      dealerLocation: this.user.address || 'Commercial Grain Terminal, Delhi',
-      dealerPhone: this.user.phone || '+91 98722 55667',
-      farmerName: farmerName,
-      farmerId: farmerId,
-      dealerId: dealerId,
-      standardPrice: crop.pricePerUnit,
-      expectedCounter: this.proposedPrice,
-      expectedParty: 'Dealer',
-      currentCounter: this.proposedPrice,
-      currentParty: 'Dealer',
-      status: 'COUNTERED',
-      statusText: 'Dealer Countered'
-    };
-
-    let storedNegs: any[] = [];
-    try {
-      const raw = localStorage.getItem('cropdeal_negotiations');
-      if (raw) storedNegs = JSON.parse(raw);
-    } catch {}
-    storedNegs = [newNeg, ...storedNegs];
-    localStorage.setItem('cropdeal_negotiations', JSON.stringify(storedNegs));
 
     // Send notifications to both Dealer and Farmer
     this.notificationService.sendNotification(
       farmerId,
       '💬 New Price Proposal',
-      `Dealer ${dealerName} proposed ₹${this.proposedPrice}/unit for ${crop.cropName} (Listed: ₹${crop.pricePerUnit}/${crop.unit || 'Kg'}).`,
+      'Dealer ' + dealerName + ' proposed ₹' + this.proposedPrice + '/unit for ' + crop.cropName + ' (Listed: ₹' + crop.pricePerUnit + '/' + (crop.unit || 'Kg') + ').',
       'NEGOTIATION'
     );
     this.notificationService.sendNotification(
       dealerId,
       '💬 Proposal Sent',
-      `Your price proposal of ₹${this.proposedPrice}/unit for ${crop.cropName} was sent to ${farmerName}.`,
+      'Your price proposal of ₹' + this.proposedPrice + '/unit for ' + crop.cropName + ' was sent to ' + farmerName + '.',
       'NEGOTIATION'
     );
 
@@ -2193,7 +2161,12 @@ export class CropListComponent implements OnInit {
     if (currentId && cropFarmerId && currentId === cropFarmerId) {
       return true;
     }
-    if (currentName && cropFarmer && currentName === cropFarmer) {
+    const currentDigits = currentId.replace(/\D+/g, '');
+    const cropFarmerDigits = cropFarmerId.replace(/\D+/g, '');
+    if (currentDigits && cropFarmerDigits && currentDigits === cropFarmerDigits) {
+      return true;
+    }
+    if (currentName && cropFarmer && (currentName === cropFarmer || currentName.includes(cropFarmer) || cropFarmer.includes(currentName))) {
       return true;
     }
     return false;

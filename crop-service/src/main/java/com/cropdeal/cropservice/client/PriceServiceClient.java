@@ -14,7 +14,7 @@ public class PriceServiceClient {
     private final String priceServiceUrl;
 
     public PriceServiceClient(RestClient restClient,
-                              @Value("${crop-service.price-service-url:http://localhost:8084}") String priceServiceUrl) {
+                              @Value("${crop-service.price-service-url:${CROP_SERVICE_PRICE_SERVICE_URL:http://price-service:8084}}") String priceServiceUrl) {
         this.restClient = restClient;
         this.priceServiceUrl = priceServiceUrl;
     }

@@ -12,7 +12,7 @@ public interface NotificationRepository
 
     List<Notification> findByOrderId(Long orderId);
 
-    List<Notification> findByRecipientOrderByCreatedAtDesc(
-            String recipient
-    );
+    List<Notification> findByRecipientOrderByCreatedAtDesc(String recipient);
+
+    List<Notification> findByRecipientInOrderByCreatedAtDesc(List<String> recipients);
 }

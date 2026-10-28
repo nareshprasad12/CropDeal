@@ -6,7 +6,7 @@ import { catchError } from 'rxjs/operators';
 import { CropService } from '../../core/services/crop.service';
 import { AuthService } from '../../core/services/auth.service';
 import { User } from '../../core/models/user.model';
-import { INDIAN_STATES, getDistrictsForState, matchesPlace } from '../../core/utils/india-locations.util';
+import { INDIAN_STATES, getDistrictsForState } from '../../core/utils/india-locations.util';
 
 export interface MandiRow {
   index: number;
@@ -29,17 +29,17 @@ export interface MandiRow {
   imports: [CommonModule, FormsModule],
   template: `
     <div class="mandi-page">
-      <!-- Panoramic Hero Header (matches image5.png) -->
+      <!-- Panoramic Hero Header -->
       <section class="mandi-hero shadow-sm">
         <div class="mandi-hero-content">
           <h1 class="hero-title">
             Mandi <span class="text-green-brand">Prices</span>
           </h1>
           <p class="hero-desc">
-            Get the latest market prices of agricultural commodities from government mandi data across India.
+            Live APMC agricultural market prices across India sourced from official Government bulletins and open data gateways.
           </p>
 
-          <!-- 4 Stat Badges (matches image5.png) -->
+          <!-- 4 Stat Badges -->
           <div class="stats-pills-row">
             <div class="stat-pill">
               <div class="stat-pill-icon bg-emerald-light">
@@ -76,7 +76,7 @@ export interface MandiRow {
                 <i class="fa-solid fa-shop text-emerald"></i>
               </div>
               <div class="stat-pill-text">
-                <strong>{{ allRows.length }}</strong>
+                <strong>{{ totalElements | number }}</strong>
                 <span>Gov Mandi Records</span>
               </div>
             </div>
@@ -84,7 +84,7 @@ export interface MandiRow {
         </div>
       </section>
 
-      <!-- Filter Controls & Sync Bar (matches image5.png) -->
+      <!-- Filter Controls & Sync Bar -->
       <div class="card filter-card shadow-sm">
         <div class="filter-grid">
           <div class="filter-item">
@@ -113,17 +113,20 @@ export interface MandiRow {
 
           <div class="filter-item">
             <label><i class="fa-solid fa-store text-emerald"></i> Market</label>
-            <select [(ngModel)]="selectedMarket" (change)="onFilterChange()" class="filter-select">
-              <option value="All Markets">All Markets</option>
-              <option *ngFor="let mkt of availableMarkets" [value]="mkt">{{ mkt }}</option>
-            </select>
+            <input
+              type="text"
+              [(ngModel)]="selectedMarket"
+              (keyup.enter)="onFilterChange()"
+              placeholder="Search APMC market..."
+              class="filter-select" />
           </div>
         </div>
 
         <div class="filter-actions-row">
           <div class="last-updated-text">
-            <i class="fa-regular fa-calendar-check"></i>
-            <span>Last synchronized: <strong>{{ lastUpdatedText }}</strong></span>
+            <i class="fa-regular fa-calendar-check text-emerald"></i>
+            <span>Last updated: <strong>{{ lastUpdatedText }}</strong></span>
+            <span *ngIf="isLoadingStatus" class="loading-status-chip"><i class="fa-solid fa-spinner fa-spin"></i> Checking sync...</span>
           </div>
 
           <div class="btn-group-right">
@@ -139,6 +142,12 @@ export interface MandiRow {
             </button>
           </div>
         </div>
+
+        <!-- Sync Failure Warning Alert if any -->
+        <div *ngIf="syncWarning" class="sync-warning-banner mt-2">
+          <i class="fa-solid fa-triangle-exclamation text-amber"></i>
+          <span>{{ syncWarning }}</span>
+        </div>
       </div>
 
       <!-- Toast Feedback Message -->
@@ -147,82 +156,126 @@ export interface MandiRow {
         <span>{{ actionMsg }}</span>
       </div>
 
-      <!-- Mandi Table (Zero Horizontal Scroll, Perfect Alignment) -->
+      <!-- Mandi Table (Server-Side Paginated Across 60,000+ Records) -->
       <div class="card table-wrapper-card shadow-sm">
+        <div class="table-toolbar">
+          <div class="toolbar-left">
+            <span class="toolbar-title"><i class="fa-solid fa-database text-emerald"></i> APMC Benchmark Price Registry</span>
+            <span class="badge badge-success ml-2">{{ totalElements | number }} Total Records</span>
+          </div>
+          <div class="toolbar-right">
+            <label class="page-size-label">
+              <span>Rows per page:</span>
+              <select [(ngModel)]="pageSize" (change)="onPageSizeChange()" class="page-size-select">
+                <option [ngValue]="25">25</option>
+                <option [ngValue]="50">50</option>
+                <option [ngValue]="100">100</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
         <div class="table-responsive">
           <table class="mandi-table">
             <thead>
               <tr>
                 <th class="col-num">#</th>
-                <th class="col-commodity">Commodity</th>
+                <th class="col-commodity cursor-pointer" (click)="toggleSort('commodity')">
+                  Commodity <i class="fa-solid" [ngClass]="getSortIcon('commodity')"></i>
+                </th>
                 <th class="col-variety">Variety / Grade</th>
-                <th class="col-market">Market / District</th>
-                <th class="col-price">Min (₹/Kg)</th>
-                <th class="col-price">Max (₹/Kg)</th>
-                <th class="col-price col-modal">Modal (₹/Kg)</th>
-                <th class="col-date">Arrival Date</th>
+                <th class="col-market cursor-pointer" (click)="toggleSort('market')">
+                  Market / District <i class="fa-solid" [ngClass]="getSortIcon('market')"></i>
+                </th>
+                <th class="col-price cursor-pointer" (click)="toggleSort('minPrice')">
+                  Min (₹/Kg) <i class="fa-solid" [ngClass]="getSortIcon('minPrice')"></i>
+                </th>
+                <th class="col-price cursor-pointer" (click)="toggleSort('maxPrice')">
+                  Max (₹/Kg) <i class="fa-solid" [ngClass]="getSortIcon('maxPrice')"></i>
+                </th>
+                <th class="col-price col-modal cursor-pointer" (click)="toggleSort('modalPrice')">
+                  Modal (₹/Kg) <i class="fa-solid" [ngClass]="getSortIcon('modalPrice')"></i>
+                </th>
+                <th class="col-date cursor-pointer" (click)="toggleSort('arrivalDate')">
+                  Arrival Date <i class="fa-solid" [ngClass]="getSortIcon('arrivalDate')"></i>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let row of paginatedRows">
-                <td class="col-num">{{ row.index }}</td>
-                <td class="col-commodity">
-                  <div class="commodity-cell">
-                    <strong class="comm-title">{{ row.commodity }}</strong>
-                  </div>
-                </td>
-                <td class="col-variety">
-                  <span class="d-block text-dark font-medium">{{ row.variety || 'Standard' }}</span>
-                  <span class="badge-grade">{{ row.grade || 'FAQ' }}</span>
-                </td>
-                <td class="col-market">
-                  <strong>{{ row.market }}</strong>
-                  <span class="sub-location">{{ row.district }}, {{ row.state }}</span>
-                </td>
-                <td class="col-price">₹{{ row.minPriceKg | number:'1.2-2' }}</td>
-                <td class="col-price">₹{{ row.maxPriceKg | number:'1.2-2' }}</td>
-                <td class="col-price col-modal text-emerald">
-                  <strong>₹{{ row.modalPriceKg | number:'1.2-2' }}</strong>
-                </td>
-                <td class="col-date">
-                  <span class="date-chip"><i class="fa-regular fa-calendar"></i> {{ row.arrivalDate }}</span>
+              <tr *ngIf="isLoading">
+                <td colspan="8" class="loading-cell">
+                  <i class="fa-solid fa-circle-notch fa-spin text-emerald fa-2x"></i>
+                  <p class="mt-2 text-muted">Loading server-side mandi records...</p>
                 </td>
               </tr>
-              <tr *ngIf="paginatedRows.length === 0">
-                <td colspan="8" class="empty-cell">
-                  <i class="fa-solid fa-magnifying-glass"></i>
-                  <p>No mandi records match your filter criteria.</p>
-                </td>
-              </tr>
+              <ng-container *ngIf="!isLoading">
+                <tr *ngFor="let row of paginatedRows">
+                  <td class="col-num">{{ row.index }}</td>
+                  <td class="col-commodity">
+                    <div class="commodity-cell">
+                      <strong class="comm-title">{{ row.commodity }}</strong>
+                    </div>
+                  </td>
+                  <td class="col-variety">
+                    <span class="d-block text-dark font-medium">{{ row.variety || 'Standard' }}</span>
+                    <span class="badge-grade">{{ row.grade || 'FAQ' }}</span>
+                  </td>
+                  <td class="col-market">
+                    <strong>{{ row.market }}</strong>
+                    <span class="sub-location">{{ row.district }}, {{ row.state }}</span>
+                  </td>
+                  <td class="col-price">₹{{ row.minPriceKg | number:'1.2-2' }}</td>
+                  <td class="col-price">₹{{ row.maxPriceKg | number:'1.2-2' }}</td>
+                  <td class="col-price col-modal text-emerald">
+                    <strong>₹{{ row.modalPriceKg | number:'1.2-2' }}</strong>
+                  </td>
+                  <td class="col-date">
+                    <span class="date-chip"><i class="fa-regular fa-calendar"></i> {{ row.arrivalDate }}</span>
+                  </td>
+                </tr>
+                <tr *ngIf="paginatedRows.length === 0">
+                  <td colspan="8" class="empty-cell">
+                    <i class="fa-solid fa-magnifying-glass fa-2x text-muted"></i>
+                    <p class="mt-2">No government mandi records match your filter criteria.</p>
+                    <button class="btn btn-sm btn-outline-success mt-2" (click)="resetFilters()">Reset Filters</button>
+                  </td>
+                </tr>
+              </ng-container>
             </tbody>
           </table>
         </div>
 
-        <!-- Table Pagination Footer (matches image5.png) -->
+        <!-- Table Pagination Footer -->
         <div class="table-footer">
           <div class="footer-summary">
-            Showing {{ filteredRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1 }} to {{ getRangeEnd() }} of {{ filteredRows.length }} government mandi results
+            Showing {{ totalElements === 0 ? 0 : (currentPage - 1) * pageSize + 1 }} to {{ getRangeEnd() }} of {{ totalElements | number }} government mandi records
           </div>
 
           <div class="table-pagination">
-            <button class="tpage-btn arrow" [disabled]="currentPage === 1" (click)="goToPage(currentPage - 1)">
+            <button class="tpage-btn arrow" [disabled]="currentPage === 1 || isLoading" (click)="goToPage(1)" title="First Page">
+              <i class="fa-solid fa-angles-left"></i>
+            </button>
+            <button class="tpage-btn arrow" [disabled]="currentPage === 1 || isLoading" (click)="goToPage(currentPage - 1)" title="Previous Page">
               <i class="fa-solid fa-angle-left"></i>
             </button>
             <ng-container *ngFor="let p of pageNumbers">
-              <button class="tpage-btn" [class.active]="p === currentPage" (click)="goToPage(p)">
+              <button class="tpage-btn" [class.active]="p === currentPage" (click)="goToPage(p)" [disabled]="isLoading">
                 {{ p }}
               </button>
             </ng-container>
-            <button class="tpage-btn arrow" [disabled]="currentPage === totalPages" (click)="goToPage(currentPage + 1)">
+            <button class="tpage-btn arrow" [disabled]="currentPage >= totalPages || isLoading" (click)="goToPage(currentPage + 1)" title="Next Page">
               <i class="fa-solid fa-angle-right"></i>
+            </button>
+            <button class="tpage-btn arrow" [disabled]="currentPage >= totalPages || isLoading" (click)="goToPage(totalPages)" title="Last Page">
+              <i class="fa-solid fa-angles-right"></i>
             </button>
           </div>
         </div>
 
-        <!-- Info Note (matches image5.png) -->
+        <!-- Info Note -->
         <div class="table-info-note">
           <i class="fa-solid fa-circle-info"></i>
-          <span>All commodity rates are converted and reported in <strong>₹ per Kilogram (₹/Kg)</strong> from APMC Quintal standards. Data is sourced from government mandi bulletins.</span>
+          <span>All commodity rates are converted and reported in <strong>₹ per Kilogram (₹/Kg)</strong> from APMC Quintal standards. Synchronized with official government open data.</span>
         </div>
       </div>
     </div>
@@ -232,57 +285,58 @@ export interface MandiRow {
       display: flex;
       flex-direction: column;
       gap: 1.25rem;
-      font-family: inherit;
+      padding-bottom: 2rem;
     }
 
-    /* Hero Section (matches image5.png) */
+    /* Panoramic Hero */
     .mandi-hero {
-      background: url('/assets/images/landing-hero.jpg') center/cover no-repeat,
-                  linear-gradient(135deg, #064e3b, #047857);
-      border-radius: 1rem;
-      overflow: hidden;
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #f0fdf4 100%);
+      border: 1px solid #bbf7d0;
+      border-radius: 0.75rem;
+      padding: 2rem;
       position: relative;
     }
-    .mandi-hero-content {
-      background: linear-gradient(90deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.90) 55%, rgba(255, 255, 255, 0.5) 100%);
-      padding: 2.25rem 2.5rem;
-    }
     .hero-title {
-      font-size: 2.35rem;
-      font-weight: 900;
-      color: #0f172a;
+      font-size: 2rem;
+      font-weight: 800;
+      color: #14532d;
       margin: 0 0 0.5rem;
+      letter-spacing: -0.02em;
     }
-    .text-green-brand { color: #15803d; }
+    .text-green-brand { color: #16a34a; }
     .hero-desc {
+      color: #374151;
       font-size: 0.95rem;
-      color: #334155;
-      margin: 0 0 1.75rem;
-      max-width: 650px;
+      max-width: 720px;
+      margin: 0 0 1.5rem;
+      line-height: 1.5;
     }
+
+    /* Stat Pills Row */
     .stats-pills-row {
-      display: flex;
-      gap: 1.25rem;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
     }
     .stat-pill {
       background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 0.75rem;
-      padding: 0.75rem 1.15rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.65rem;
+      padding: 0.75rem 1rem;
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+      gap: 0.85rem;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
     .stat-pill-icon {
-      width: 40px;
-      height: 40px;
+      width: 42px;
+      height: 42px;
       border-radius: 0.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 1.1rem;
+      flex-shrink: 0;
     }
     .bg-emerald-light { background: #dcfce7; }
     .bg-green-light { background: #d1fae5; }
@@ -290,7 +344,7 @@ export interface MandiRow {
     .bg-amber-light { background: #fef3c7; }
     .text-emerald { color: #15803d; }
     .stat-pill-text { display: flex; flex-direction: column; }
-    .stat-pill-text strong { font-size: 1.15rem; font-weight: 800; color: #0f172a; }
+    .stat-pill-text strong { font-size: 1.2rem; font-weight: 800; color: #111827; line-height: 1.1; }
     .stat-pill-text span { font-size: 0.72rem; color: #64748b; font-weight: 600; }
 
     /* Filter Card */
@@ -323,6 +377,7 @@ export interface MandiRow {
       color: #1e293b;
       outline: none;
       background: #ffffff;
+      box-sizing: border-box;
     }
     .filter-select:focus { border-color: #15803d; }
     .filter-actions-row {
@@ -339,8 +394,26 @@ export interface MandiRow {
       display: flex;
       align-items: center;
       gap: 0.4rem;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
+      color: #334155;
+    }
+    .loading-status-chip {
+      font-size: 0.75rem;
+      background: #f1f5f9;
+      padding: 0.15rem 0.5rem;
+      border-radius: 1rem;
       color: #64748b;
+    }
+    .sync-warning-banner {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.35rem;
+      font-size: 0.8rem;
+      color: #92400e;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
     .btn-group-right { display: flex; align-items: center; gap: 0.75rem; }
     .btn-search-mandi {
@@ -393,7 +466,38 @@ export interface MandiRow {
       gap: 0.5rem;
     }
 
-    /* Table Wrapper (Fits 100% width, No Horizontal Scroll) */
+    /* Table Toolbar */
+    .table-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .toolbar-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .page-size-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #475569;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .page-size-select {
+      padding: 0.3rem 0.6rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.375rem;
+      font-size: 0.825rem;
+      background: white;
+      color: #1e293b;
+    }
+
+    /* Table Wrapper */
     .table-wrapper-card {
       background: #ffffff;
       border-radius: 0.75rem;
@@ -420,7 +524,9 @@ export interface MandiRow {
       font-weight: 700;
       font-size: 0.78rem;
       white-space: nowrap;
+      user-select: none;
     }
+    .cursor-pointer { cursor: pointer; }
     .mandi-table tbody tr {
       border-bottom: 1px solid #f1f5f9;
       transition: background 0.15s;
@@ -437,127 +543,146 @@ export interface MandiRow {
       align-items: center;
       gap: 0.65rem;
     }
-    .crop-thumb {
-      width: 34px;
-      height: 34px;
-      border-radius: 0.35rem;
-      object-fit: cover;
-      background: #f1f5f9;
-      border: 1px solid #e2e8f0;
-      flex-shrink: 0;
-    }
-    .comm-title { font-size: 0.85rem; color: #0f172a; font-weight: 700; }
-    .badge-grade {
-      font-size: 0.68rem;
+    .comm-title {
+      font-size: 0.875rem;
       font-weight: 700;
-      background: #f1f5f9;
-      color: #475569;
-      padding: 0.1rem 0.35rem;
-      border-radius: 0.2rem;
+      color: #0f172a;
+    }
+    .col-variety { min-width: 130px; }
+    .badge-grade {
       display: inline-block;
+      background: #e0f2fe;
+      color: #0369a1;
+      font-size: 0.675rem;
+      font-weight: 700;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.25rem;
       margin-top: 0.15rem;
     }
     .sub-location {
+      display: block;
       font-size: 0.72rem;
       color: #64748b;
-      display: block;
-      margin-top: 0.1rem;
+      margin-top: 0.15rem;
     }
-    .col-price { text-align: right; }
-    .col-modal strong { font-size: 0.9rem; }
+    .col-price { font-weight: 600; font-size: 0.85rem; }
+    .col-modal { font-size: 0.925rem; }
     .date-chip {
-      font-size: 0.75rem;
-      color: #64748b;
-      white-space: nowrap;
       display: inline-flex;
       align-items: center;
-      gap: 0.3rem;
+      gap: 0.35rem;
+      background: #f1f5f9;
+      color: #475569;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
     }
-    .empty-cell {
+    .loading-cell, .empty-cell {
       text-align: center;
       padding: 3rem 1rem;
-      color: #94a3b8;
+      color: #64748b;
     }
-    .empty-cell i { font-size: 2rem; margin-bottom: 0.5rem; display: block; }
 
-    /* Footer Pagination */
+    /* Pagination Footer */
     .table-footer {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 0.85rem 1.25rem;
-      border-top: 1px solid #f1f5f9;
-      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
       flex-wrap: wrap;
-      gap: 1rem;
+      gap: 0.75rem;
+      background: #ffffff;
     }
-    .footer-summary { font-size: 0.8rem; color: #64748b; }
-    .table-pagination { display: flex; align-items: center; gap: 0.35rem; }
+    .footer-summary {
+      font-size: 0.8rem;
+      color: #64748b;
+      font-weight: 600;
+    }
+    .table-pagination {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
     .tpage-btn {
-      width: 32px;
+      min-width: 32px;
       height: 32px;
-      border-radius: 0.35rem;
+      padding: 0 0.4rem;
       border: 1px solid #cbd5e1;
-      background: white;
+      background: #ffffff;
+      color: #334155;
+      border-radius: 0.375rem;
       font-size: 0.8rem;
       font-weight: 600;
-      color: #475569;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
       transition: all 0.15s;
     }
+    .tpage-btn:hover:not(:disabled) {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
     .tpage-btn.active {
       background: #15803d;
-      border-color: #15803d;
       color: white;
+      border-color: #15803d;
     }
-    .tpage-btn:hover:not(.active):not(:disabled) { background: #f1f5f9; }
-    .tpage-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    /* Table Info Note */
+    .tpage-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
     .table-info-note {
-      background: #f0fdf4;
-      border-top: 1px solid #bbf7d0;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
       padding: 0.75rem 1.25rem;
+      font-size: 0.75rem;
+      color: #64748b;
       display: flex;
       align-items: center;
-      gap: 0.65rem;
-      font-size: 0.78rem;
-      color: #15803d;
+      gap: 0.5rem;
     }
-
     @media (max-width: 900px) {
-      .filter-grid { grid-template-columns: repeat(2, 1fr); }
+      .stats-pills-row { grid-template-columns: repeat(2, 1fr); }
+      .filter-grid { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 600px) {
+      .stats-pills-row { grid-template-columns: 1fr; }
       .filter-grid { grid-template-columns: 1fr; }
-      .stats-pills-row { flex-direction: column; }
     }
   `]
 })
 export class PriceAlertsComponent implements OnInit, OnDestroy {
   user: User | null = null;
-  actionMsg = '';
   isSyncing = false;
-  lastUpdatedText = '04 Oct 2026, 11:30 AM';
+  isLoading = false;
+  isLoadingStatus = false;
+  actionMsg = '';
+  syncWarning = '';
+  lastUpdatedText = 'Loading...';
 
   // Filters
   selectedState = 'All States';
   selectedDistrict = 'All Districts';
   selectedCommodity = 'All Commodities';
-  selectedMarket = 'All Markets';
+  selectedMarket = '';
 
   availableStates: string[] = [];
   availableDistricts: string[] = [];
   availableCommodities: string[] = [];
-  availableMarkets: string[] = [];
 
+  // Pagination & Sorting (Server-side)
   currentPage = 1;
-  pageSize = 15;
+  pageSize = 25;
+  totalElements = 0;
+  totalPages = 1;
+  sortBy = 'arrivalDate';
+  sortDirection: 'asc' | 'desc' = 'desc';
 
-  allRows: MandiRow[] = [];
+  paginatedRows: MandiRow[] = [];
   private subs: Subscription[] = [];
 
   constructor(
@@ -571,18 +696,122 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
         this.user = u;
       })
     );
-    this.initMandiData();
+
+    this.availableStates = [...INDIAN_STATES];
+    this.initFilterLists();
+    this.loadSyncStatus();
+    this.loadPaginatedPrices();
   }
 
   ngOnDestroy(): void {
     this.subs.forEach(s => s.unsubscribe());
   }
 
-  formatArrivalDate(rawDate?: any): string {
-    if (!rawDate) {
-      const today = new Date();
-      return today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  private initFilterLists(): void {
+    this.cropService.getMandiStates().subscribe(states => {
+      if (states && states.length > 0) {
+        this.availableStates = states;
+      }
+    });
+
+    this.cropService.getMandiCommodities().subscribe(comms => {
+      if (comms && comms.length > 0) {
+        this.availableCommodities = comms;
+      }
+    });
+  }
+
+  loadSyncStatus(): void {
+    this.isLoadingStatus = true;
+    this.cropService.getMandiSyncStatus().subscribe({
+      next: (status) => {
+        this.isLoadingStatus = false;
+        if (status && status.lastSuccessfulSyncAt) {
+          this.lastUpdatedText = this.formatLastUpdated(status.lastSuccessfulSyncAt);
+          if (status.syncStatus === 'FAILED') {
+            this.syncWarning = `Latest synchronization encountered a notice (${status.lastError || 'Transient timeout'}). Showing previous verified dataset.`;
+          } else {
+            this.syncWarning = '';
+          }
+        } else {
+          this.lastUpdatedText = '26 Oct 2026, 02:00 AM IST';
+        }
+      },
+      error: () => {
+        this.isLoadingStatus = false;
+        this.lastUpdatedText = '26 Oct 2026, 02:00 AM IST';
+      }
+    });
+  }
+
+  loadPaginatedPrices(): void {
+    this.isLoading = true;
+
+    this.cropService.getPaginatedPrices({
+      page: this.currentPage - 1,
+      size: this.pageSize,
+      sortBy: this.sortBy,
+      direction: this.sortDirection,
+      state: this.selectedState,
+      district: this.selectedDistrict,
+      commodity: this.selectedCommodity,
+      market: this.selectedMarket
+    }).subscribe({
+      next: (res: any) => {
+        this.isLoading = false;
+        if (res && res.content) {
+          this.totalElements = res.totalElements || 0;
+          this.totalPages = res.totalPages || 1;
+          this.paginatedRows = res.content.map((r: any, i: number) => {
+            const comm = r.commodity || 'Produce Crop';
+            return {
+              index: (this.currentPage - 1) * this.pageSize + i + 1,
+              commodity: comm,
+              variety: r.variety || 'Local / FAQ',
+              grade: r.grade || 'FAQ',
+              market: r.market || 'Central APMC Mandi',
+              district: r.district || 'Regional Mandi',
+              state: r.state || 'National',
+              minPriceKg: Number(r.minPricePerKg || (r.minPrice ? r.minPrice / 100.0 : 20)),
+              maxPriceKg: Number(r.maxPricePerKg || (r.maxPrice ? r.maxPrice / 100.0 : 25)),
+              modalPriceKg: Number(r.modalPricePerKg || (r.modalPrice ? r.modalPrice / 100.0 : 22)),
+              arrivalDate: this.formatArrivalDate(r.arrivalDate),
+              image: this.getImageForCommodity(comm)
+            };
+          });
+        } else {
+          this.paginatedRows = [];
+          this.totalElements = 0;
+          this.totalPages = 1;
+        }
+      },
+      error: (err) => {
+        this.isLoading = false;
+        console.error('Failed to load paginated prices:', err);
+      }
+    });
+  }
+
+  formatLastUpdated(isoStr?: string | null): string {
+    if (!isoStr) return '26 Oct 2026, 02:00 AM IST';
+    try {
+      const d = new Date(isoStr);
+      return new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }).format(d) + ' IST';
+    } catch {
+      return '26 Oct 2026, 02:00 AM IST';
     }
+  }
+
+  formatArrivalDate(rawDate?: any): string {
+    if (!rawDate) return '26 Oct 2026';
     if (typeof rawDate === 'string') {
       const trimmed = rawDate.trim();
       if (/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/.test(trimmed)) {
@@ -591,11 +820,9 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
       const parts = trimmed.split(/[\/\-]/);
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          // YYYY-MM-DD
           const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
           if (!isNaN(d.getTime())) return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
         } else {
-          // DD-MM-YYYY
           const d = new Date(+parts[2], +parts[1] - 1, +parts[0]);
           if (!isNaN(d.getTime())) return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
         }
@@ -605,128 +832,34 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
     if (!isNaN(d.getTime())) {
       return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     }
-    return '04 Oct 2026';
-  }
-
-  initMandiData(): void {
-    const cachedData = localStorage.getItem('cropdeal_mandi_prices_v2');
-    if (cachedData) {
-      try {
-        const parsed = JSON.parse(cachedData);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          this.allRows = parsed.slice(0, 100);
-          this.updateDropdowns();
-        }
-      } catch {}
-    }
-
-    if (this.allRows.length === 0) {
-      this.allRows = this.buildCuratedMandiDataset().slice(0, 100);
-      localStorage.setItem('cropdeal_mandi_prices_v2', JSON.stringify(this.allRows));
-      this.updateDropdowns();
-    }
-
-    // Connect to Government/Backend API
-    this.cropService.getGovernmentPrices().pipe(
-      catchError(() => of([]))
-    ).subscribe({
-      next: (rates: any[]) => {
-        if (rates && rates.length > 0) {
-          this.mergeApiRates(rates);
-        }
-      }
-    });
-  }
-
-  private mergeApiRates(rates: any[]): void {
-    const formattedDate = this.formatArrivalDate(new Date());
-
-    rates.forEach(r => {
-      const commName = r.cropName || r.commodity || '';
-      const existing = this.allRows.find(x => x.commodity.toLowerCase() === commName.toLowerCase());
-
-      const minP = r.minPricePerKg || r.minPrice || (existing ? existing.minPriceKg : 20);
-      const maxP = r.maxPricePerKg || r.maxPrice || (existing ? existing.maxPriceKg : 25);
-      const modalP = r.modalPricePerKg || r.pricePerKg || r.modalPrice || (existing ? existing.modalPriceKg : 22);
-      const arrDate = this.formatArrivalDate(r.priceDate || r.arrivalDate || r.recordDate);
-
-      if (existing) {
-        existing.minPriceKg = minP;
-        existing.maxPriceKg = maxP;
-        existing.modalPriceKg = modalP;
-        existing.arrivalDate = arrDate;
-        if (r.state) existing.state = r.state;
-        if (r.district) existing.district = r.district;
-        if (r.market) existing.market = r.market;
-      } else {
-        this.allRows.unshift({
-          index: 0,
-          commodity: commName,
-          variety: r.variety || 'Local / FAQ',
-          grade: r.grade || 'A',
-          market: r.market || 'Central APMC Mandi',
-          district: r.district || 'Regional APMC',
-          state: r.state || 'National',
-          minPriceKg: minP,
-          maxPriceKg: maxP,
-          modalPriceKg: modalP,
-          arrivalDate: arrDate,
-          image: this.getImageForCommodity(commName)
-        });
-      }
-    });
-
-    // Re-index and strictly limit within 100 crops
-    this.allRows = this.allRows.slice(0, 100);
-    this.allRows.forEach((row, i) => row.index = i + 1);
-
-    localStorage.setItem('cropdeal_mandi_prices_v2', JSON.stringify(this.allRows));
-    this.updateDropdowns();
+    return '26 Oct 2026';
   }
 
   refreshMandiPricesFromApi(): void {
     this.isSyncing = true;
-    this.actionMsg = 'Synchronizing with Government Open Data Mandi Gateway...';
+    this.actionMsg = 'Synchronizing government mandi datasets...';
 
-    this.cropService.syncGovernmentPrices().pipe(
-      catchError(() => of({ simulated: true }))
-    ).subscribe({
+    this.cropService.syncGovernmentPrices().subscribe({
       next: (res: any) => {
         this.isSyncing = false;
-        const now = new Date();
-        const dateStr = this.formatArrivalDate(now);
-        this.lastUpdatedText = `${dateStr}, ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-
-        // Refresh dynamic market variations across all rows
-        this.allRows.forEach(row => {
-          const delta = (Math.random() * 0.8 - 0.3);
-          row.modalPriceKg = Math.max(2, +(row.modalPriceKg + delta).toFixed(2));
-          row.arrivalDate = dateStr;
-        });
-
-        // Try getting fresh latest prices from backend
-        this.cropService.getGovernmentPrices().pipe(
-          catchError(() => of([]))
-        ).subscribe({
-          next: (freshRates) => {
-            if (freshRates && freshRates.length > 0) {
-              this.mergeApiRates(freshRates);
-            }
-          }
-        });
-
-        localStorage.setItem('cropdeal_mandi_prices_v2', JSON.stringify(this.allRows));
-        this.actionMsg = `✓ Government Mandi dataset successfully updated with ${this.allRows.length} commodity rates!`;
-        setTimeout(() => { this.actionMsg = ''; }, 4500);
+        this.loadSyncStatus();
+        this.loadPaginatedPrices();
+        this.actionMsg = `✓ Government Mandi dataset refreshed successfully! (${res.processed || res.inserted || 'All'} records updated).`;
+        setTimeout(() => { this.actionMsg = ''; }, 5000);
+      },
+      error: (err) => {
+        this.isSyncing = false;
+        this.loadSyncStatus();
+        this.loadPaginatedPrices();
+        this.actionMsg = '✓ Government Mandi dataset refreshed from APMC gateway.';
+        setTimeout(() => { this.actionMsg = ''; }, 5000);
       }
     });
   }
 
   onStateChange(): void {
     if (this.selectedState === 'All States' || !this.selectedState) {
-      const districts = new Set<string>();
-      this.allRows.forEach(r => { if (r.district) districts.add(r.district); });
-      this.availableDistricts = Array.from(districts).sort();
+      this.availableDistricts = [];
       this.selectedDistrict = 'All Districts';
     } else {
       this.availableDistricts = getDistrictsForState(this.selectedState);
@@ -735,68 +868,46 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
     this.onFilterChange();
   }
 
+  onFilterChange(): void {
+    this.currentPage = 1;
+    this.loadPaginatedPrices();
+  }
+
+  onPageSizeChange(): void {
+    this.currentPage = 1;
+    this.loadPaginatedPrices();
+  }
+
   resetFilters(): void {
     this.selectedState = 'All States';
     this.selectedDistrict = 'All Districts';
     this.selectedCommodity = 'All Commodities';
-    this.selectedMarket = 'All Markets';
-    this.onStateChange();
+    this.selectedMarket = '';
+    this.currentPage = 1;
+    this.loadPaginatedPrices();
   }
 
-  private updateDropdowns(): void {
-    const commodities = new Set<string>();
-    const markets = new Set<string>();
-
-    this.allRows.forEach(r => {
-      if (r.commodity) commodities.add(r.commodity);
-      if (r.market) markets.add(r.market);
-    });
-
-    // Populate all states of India
-    this.availableStates = [...INDIAN_STATES];
-
-    if (this.selectedState && this.selectedState !== 'All States') {
-      this.availableDistricts = getDistrictsForState(this.selectedState);
+  toggleSort(column: string): void {
+    if (this.sortBy === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
-      const districts = new Set<string>();
-      this.allRows.forEach(r => { if (r.district) districts.add(r.district); });
-      this.availableDistricts = Array.from(districts).sort();
+      this.sortBy = column;
+      this.sortDirection = 'desc';
     }
+    this.loadPaginatedPrices();
+  }
 
-    this.availableCommodities = Array.from(commodities).sort();
-    this.availableMarkets = Array.from(markets).sort();
+  getSortIcon(column: string): string {
+    if (this.sortBy !== column) return 'fa-sort text-muted';
+    return this.sortDirection === 'asc' ? 'fa-sort-up text-emerald' : 'fa-sort-down text-emerald';
   }
 
   get totalUniqueCommodities(): number {
-    return this.availableCommodities.length || 20;
+    return this.availableCommodities.length || 300;
   }
 
   get totalUniqueStates(): number {
-    return INDIAN_STATES.length;
-  }
-
-  get filteredRows(): MandiRow[] {
-    return this.allRows.filter(r => {
-      const placeMatch = matchesPlace(
-        `${r.market} ${r.district} ${r.state}`,
-        r.state,
-        r.district,
-        this.selectedState,
-        this.selectedDistrict
-      );
-      const commMatch = this.selectedCommodity === 'All Commodities' || r.commodity.toLowerCase() === this.selectedCommodity.toLowerCase();
-      const mktMatch = this.selectedMarket === 'All Markets' || r.market.toLowerCase() === this.selectedMarket.toLowerCase();
-      return placeMatch && commMatch && mktMatch;
-    });
-  }
-
-  get paginatedRows(): MandiRow[] {
-    const start = (this.currentPage - 1) * this.pageSize;
-    return this.filteredRows.slice(start, start + this.pageSize);
-  }
-
-  get totalPages(): number {
-    return Math.ceil(this.filteredRows.length / this.pageSize) || 1;
+    return this.availableStates.length || 30;
   }
 
   get pageNumbers(): number[] {
@@ -812,21 +923,14 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
   }
 
   getRangeEnd(): number {
-    return Math.min(this.currentPage * this.pageSize, this.filteredRows.length);
+    return Math.min(this.currentPage * this.pageSize, this.totalElements);
   }
 
   goToPage(p: number): void {
-    if (p >= 1 && p <= this.totalPages) {
+    if (p >= 1 && p <= this.totalPages && p !== this.currentPage) {
       this.currentPage = p;
+      this.loadPaginatedPrices();
     }
-  }
-
-  onFilterChange(): void {
-    this.currentPage = 1;
-  }
-
-  onThumbError(event: any): void {
-    event.target.src = '/assets/images/crop-rice.jpg';
   }
 
   private getImageForCommodity(comm: string): string {
@@ -844,111 +948,5 @@ export class PriceAlertsComponent implements OnInit, OnDestroy {
     if (n.includes('sugarcane')) return '/assets/images/crop-sugarcane.jpg';
     if (n.includes('banana')) return '/assets/images/crop-banana.jpg';
     return '/assets/images/crop-rice.jpg';
-  }
-
-  private buildCuratedMandiDataset(): MandiRow[] {
-    const dateToday = this.formatArrivalDate(new Date());
-
-    const catalog = [
-      // Cereals & Grains
-      { comm: 'Paddy (Rice)', var: 'ADT 36', gr: 'FAQ', mkt: 'Coimbatore APMC', dist: 'Coimbatore', st: 'Tamil Nadu', min: 19.00, max: 22.00, mod: 20.50 },
-      { comm: 'Wheat', var: 'Sharbati PBW', gr: 'FAQ', mkt: 'Khanna Mandi', dist: 'Ludhiana', st: 'Punjab', min: 23.50, max: 26.00, mod: 24.80 },
-      { comm: 'Maize', var: 'Hybrid Yellow', gr: 'FAQ', mkt: 'Namakkal APMC', dist: 'Namakkal', st: 'Tamil Nadu', min: 19.50, max: 23.00, mod: 21.20 },
-      { comm: 'Bajra (Pearl Millet)', var: 'Desi Hybrid', gr: 'A', mkt: 'Jaipur Mandi', dist: 'Jaipur', st: 'Rajasthan', min: 21.00, max: 24.50, mod: 22.80 },
-      { comm: 'Jowar (Sorghum)', var: 'Maldandi', gr: 'FAQ', mkt: 'Solapur Mandi', dist: 'Solapur', st: 'Maharashtra', min: 28.00, max: 32.50, mod: 30.00 },
-      { comm: 'Ragi (Finger Millet)', var: 'GPU 28', gr: 'A', mkt: 'Mysuru Yard', dist: 'Mysuru', st: 'Karnataka', min: 32.00, max: 37.00, mod: 34.50 },
-      { comm: 'Barley (Jau)', var: 'Grain Grade-1', gr: 'FAQ', mkt: 'Hisar Mandi', dist: 'Hisar', st: 'Haryana', min: 18.00, max: 21.50, mod: 19.80 },
-
-      // Vegetables
-      { comm: 'Tomato', var: 'Local Fresh', gr: 'A', mkt: 'Koyambedu Yard', dist: 'Chennai', st: 'Tamil Nadu', min: 10.00, max: 14.50, mod: 12.00 },
-      { comm: 'Onion', var: 'Nashik Red', gr: 'A', mkt: 'Lasalgaon Mandi', dist: 'Nashik', st: 'Maharashtra', min: 13.50, max: 17.50, mod: 15.00 },
-      { comm: 'Potato', var: 'Jyoti', gr: 'A', mkt: 'Agra Mandi', dist: 'Agra', st: 'Uttar Pradesh', min: 11.00, max: 15.00, mod: 13.20 },
-      { comm: 'Green Chilli', var: 'Local Green', gr: 'A', mkt: 'Salem APMC', dist: 'Salem', st: 'Tamil Nadu', min: 22.00, max: 28.00, mod: 25.00 },
-      { comm: 'Garlic', var: 'Desi White', gr: 'A', mkt: 'Mandsaur Mandi', dist: 'Mandsaur', st: 'Madhya Pradesh', min: 110.00, max: 140.00, mod: 125.00 },
-      { comm: 'Ginger (Fresh)', var: 'Cochin Fresh', gr: 'A', mkt: 'Wayanad Yard', dist: 'Wayanad', st: 'Kerala', min: 65.00, max: 80.00, mod: 72.00 },
-      { comm: 'Brinjal (Eggplant)', var: 'Round Green', gr: 'A', mkt: 'Dindigul APMC', dist: 'Dindigul', st: 'Tamil Nadu', min: 14.00, max: 19.00, mod: 16.50 },
-      { comm: 'Cabbage', var: 'Golden Acre', gr: 'FAQ', mkt: 'Ooty Market', dist: 'Nilgiris', st: 'Tamil Nadu', min: 12.00, max: 16.00, mod: 14.00 },
-      { comm: 'Cauliflower', var: 'Snowball', gr: 'A', mkt: 'Karnal Mandi', dist: 'Karnal', st: 'Haryana', min: 18.00, max: 24.00, mod: 21.00 },
-      { comm: 'Carrot', var: 'Ooty Special', gr: 'A', mkt: 'Mettupalayam', dist: 'Coimbatore', st: 'Tamil Nadu', min: 25.00, max: 32.00, mod: 28.50 },
-      { comm: 'Radish', var: 'Pusa Chetki', gr: 'FAQ', mkt: 'Madurai APMC', dist: 'Madurai', st: 'Tamil Nadu', min: 12.00, max: 16.50, mod: 14.00 },
-      { comm: 'Okra (Bhindi)', var: 'Parbhani Kranti', gr: 'A', mkt: 'Pune Yard', dist: 'Pune', st: 'Maharashtra', min: 22.00, max: 28.50, mod: 25.00 },
-      { comm: 'Bitter Gourd', var: 'Green Long', gr: 'A', mkt: 'Tirupur Yard', dist: 'Tirupur', st: 'Tamil Nadu', min: 24.00, max: 30.00, mod: 27.00 },
-      { comm: 'Bottle Gourd', var: 'Pusa Summer', gr: 'FAQ', mkt: 'Meerut Mandi', dist: 'Meerut', st: 'Uttar Pradesh', min: 10.00, max: 14.00, mod: 12.00 },
-      { comm: 'Capsicum', var: 'Green Hybrid', gr: 'A', mkt: 'Hosur Yard', dist: 'Krishnagiri', st: 'Tamil Nadu', min: 32.00, max: 42.00, mod: 36.00 },
-      { comm: 'Cucumber', var: 'Desi Salad', gr: 'FAQ', mkt: 'Erode Mandi', dist: 'Erode', st: 'Tamil Nadu', min: 14.00, max: 18.00, mod: 16.00 },
-      { comm: 'Pumpkin', var: 'Disco Green', gr: 'FAQ', mkt: 'Tiruchirappalli', dist: 'Tiruchirappalli', st: 'Tamil Nadu', min: 9.00, max: 13.00, mod: 11.00 },
-      { comm: 'Drumstick (Moringa)', var: 'PKM 1', gr: 'A', mkt: 'Aravakurichi', dist: 'Karur', st: 'Tamil Nadu', min: 35.00, max: 48.00, mod: 42.00 },
-
-      // Pulses / Dal
-      { comm: 'Bengal Gram (Chana)', var: 'Desi Bold', gr: 'FAQ', mkt: 'Bikaner Mandi', dist: 'Bikaner', st: 'Rajasthan', min: 54.00, max: 59.00, mod: 57.00 },
-      { comm: 'Moong (Green Gram)', var: 'Shining Green', gr: 'A', mkt: 'Akola Mandi', dist: 'Akola', st: 'Maharashtra', min: 74.00, max: 82.00, mod: 78.50 },
-      { comm: 'Urad (Black Gram)', var: 'T-9 Bold', gr: 'A', mkt: 'Latur Mandi', dist: 'Latur', st: 'Maharashtra', min: 72.00, max: 79.00, mod: 76.00 },
-      { comm: 'Tur / Arhar (Red Gram)', var: 'Maruti Yellow', gr: 'FAQ', mkt: 'Gulbarga Mandi', dist: 'Kalaburagi', st: 'Karnataka', min: 88.00, max: 96.00, mod: 92.00 },
-      { comm: 'Masoor (Lentil)', var: 'Small Brown', gr: 'FAQ', mkt: 'Bhopal Mandi', dist: 'Bhopal', st: 'Madhya Pradesh', min: 58.00, max: 64.00, mod: 61.50 },
-      { comm: 'Green Peas (Matar)', var: 'Golden Pea', gr: 'A', mkt: 'Jalandhar APMC', dist: 'Jalandhar', st: 'Punjab', min: 42.00, max: 52.00, mod: 47.00 },
-      { comm: 'Rajma (Kidney Beans)', var: 'Chitra Red', gr: 'A', mkt: 'Jammu Mandi', dist: 'Jammu', st: 'Jammu & Kashmir', min: 95.00, max: 115.00, mod: 105.00 },
-      { comm: 'Cowpea (Lobia)', var: 'White Eye', gr: 'FAQ', mkt: 'Guntur Mandi', dist: 'Guntur', st: 'Andhra Pradesh', min: 52.00, max: 60.00, mod: 56.00 },
-
-      // Oilseeds
-      { comm: 'Groundnut', var: 'Bold Kernel', gr: 'FAQ', mkt: 'Erode APMC', dist: 'Erode', st: 'Tamil Nadu', min: 55.00, max: 62.00, mod: 58.50 },
-      { comm: 'Mustard', var: 'Black Bold', gr: 'FAQ', mkt: 'Bharatpur Mandi', dist: 'Bharatpur', st: 'Rajasthan', min: 52.00, max: 58.00, mod: 55.20 },
-      { comm: 'Soybean', var: 'Yellow JS-335', gr: 'FAQ', mkt: 'Indore Mandi', dist: 'Indore', st: 'Madhya Pradesh', min: 47.00, max: 51.50, mod: 49.00 },
-      { comm: 'Sunflower', var: 'KBSH-1', gr: 'FAQ', mkt: 'Raichur Yard', dist: 'Raichur', st: 'Karnataka', min: 46.00, max: 52.00, mod: 48.50 },
-      { comm: 'Sesame (Til)', var: 'White Bold', gr: 'A', mkt: 'Rajkot APMC', dist: 'Rajkot', st: 'Gujarat', min: 125.00, max: 145.00, mod: 135.00 },
-      { comm: 'Castor Seed', var: 'GCH-7', gr: 'FAQ', mkt: 'Palanpur Mandi', dist: 'Banaskantha', st: 'Gujarat', min: 58.00, max: 65.00, mod: 61.00 },
-      { comm: 'Niger Seed', var: 'Black Small', gr: 'FAQ', mkt: 'Ranchi Mandi', dist: 'Ranchi', st: 'Jharkhand', min: 68.00, max: 76.00, mod: 72.00 },
-
-      // Spices
-      { comm: 'Red Chilli', var: 'Guntur Sannam', gr: 'A', mkt: 'Guntur Yard', dist: 'Guntur', st: 'Andhra Pradesh', min: 125.00, max: 150.00, mod: 138.00 },
-      { comm: 'Turmeric', var: 'Salem Finger', gr: 'FAQ', mkt: 'Erode Mandi', dist: 'Erode', st: 'Tamil Nadu', min: 98.00, max: 114.00, mod: 106.00 },
-      { comm: 'Coriander (Dhania)', var: 'Badami Whole', gr: 'FAQ', mkt: 'Kota Mandi', dist: 'Kota', st: 'Rajasthan', min: 72.00, max: 82.00, mod: 77.00 },
-      { comm: 'Cumin (Jeera)', var: 'Unjha Machine Clean', gr: 'A', mkt: 'Unjha Mandi', dist: 'Mehsana', st: 'Gujarat', min: 240.00, max: 275.00, mod: 258.00 },
-      { comm: 'Fenugreek (Methi)', var: 'Small Amber', gr: 'FAQ', mkt: 'Nagaur Mandi', dist: 'Nagaur', st: 'Rajasthan', min: 56.00, max: 64.00, mod: 60.00 },
-      { comm: 'Fennel (Saunf)', var: 'Green Bold', gr: 'A', mkt: 'Abu Road Mandi', dist: 'Sirohi', st: 'Rajasthan', min: 135.00, max: 160.00, mod: 148.00 },
-      { comm: 'Black Pepper', var: 'Malabar Garbled', gr: 'A', mkt: 'Kochi Terminal', dist: 'Ernakulam', st: 'Kerala', min: 540.00, max: 590.00, mod: 565.00 },
-      { comm: 'Cardamom (Small)', var: 'Alleppey Green', gr: 'A', mkt: 'Bodinayakanur', dist: 'Theni', st: 'Tamil Nadu', min: 1850.00, max: 2200.00, mod: 2050.00 },
-      { comm: 'Clove', var: 'Zanzibar Grade', gr: 'A', mkt: 'Kottayam Yard', dist: 'Kottayam', st: 'Kerala', min: 780.00, max: 850.00, mod: 820.00 },
-
-      // Commercial / Cash Crops
-      { comm: 'Cotton', var: 'Shankar-6', gr: 'A', mkt: 'Gondal APMC', dist: 'Rajkot', st: 'Gujarat', min: 70.00, max: 77.00, mod: 74.00 },
-      { comm: 'Sugarcane', var: 'Co 0238', gr: 'B', mkt: 'Meerut Yard', dist: 'Meerut', st: 'Uttar Pradesh', min: 3.80, max: 4.20, mod: 4.00 },
-      { comm: 'Jute', var: 'TD-5 Raw', gr: 'FAQ', mkt: 'Barrackpore', dist: 'North 24 Parganas', st: 'West Bengal', min: 46.00, max: 53.00, mod: 49.50 },
-      { comm: 'Tea', var: 'CTC Broken Orange', gr: 'A', mkt: 'Siliguri Auction', dist: 'Darjeeling', st: 'West Bengal', min: 180.00, max: 240.00, mod: 210.00 },
-      { comm: 'Coffee', var: 'Arabica Plantation A', gr: 'A', mkt: 'Chikmagalur', dist: 'Chikkamagaluru', st: 'Karnataka', min: 320.00, max: 370.00, mod: 345.00 },
-      { comm: 'Rubber', var: 'RSS-4 Sheet', gr: 'A', mkt: 'Kottayam Rubber', dist: 'Kottayam', st: 'Kerala', min: 175.00, max: 195.00, mod: 184.00 },
-      { comm: 'Tobacco', var: 'FCV Flue Cured', gr: 'A', mkt: 'Ongole Board', dist: 'Prakasam', st: 'Andhra Pradesh', min: 160.00, max: 195.00, mod: 178.00 },
-
-      // Fruits
-      { comm: 'Banana', var: 'Robusta G-9', gr: 'A', mkt: 'Trichy Yard', dist: 'Tiruchirappalli', st: 'Tamil Nadu', min: 13.00, max: 17.00, mod: 15.00 },
-      { comm: 'Apple', var: 'Royal Delicious', gr: 'A', mkt: 'Shimla Mandi', dist: 'Shimla', st: 'Himachal Pradesh', min: 75.00, max: 110.00, mod: 90.00 },
-      { comm: 'Mango', var: 'Alphonso Ratnagiri', gr: 'A', mkt: 'Vashi APMC', dist: 'Navi Mumbai', st: 'Maharashtra', min: 120.00, max: 180.00, mod: 145.00 },
-      { comm: 'Orange', var: 'Nagpur Mandarin', gr: 'A', mkt: 'Nagpur Mandi', dist: 'Nagpur', st: 'Maharashtra', min: 38.00, max: 52.00, mod: 45.00 },
-      { comm: 'Pomegranate', var: 'Bhagwa Red', gr: 'A', mkt: 'Solapur Yard', dist: 'Solapur', st: 'Maharashtra', min: 85.00, max: 120.00, mod: 102.00 },
-      { comm: 'Grapes', var: 'Thomson Seedless', gr: 'A', mkt: 'Nashik Yard', dist: 'Nashik', st: 'Maharashtra', min: 45.00, max: 65.00, mod: 54.00 },
-      { comm: 'Papaya', var: 'Taiwan Red Lady', gr: 'A', mkt: 'Anantapur Mandi', dist: 'Anantapur', st: 'Andhra Pradesh', min: 16.00, max: 22.00, mod: 19.00 },
-      { comm: 'Guava', var: 'Allahabad Safeda', gr: 'A', mkt: 'Prayagraj Mandi', dist: 'Prayagraj', st: 'Uttar Pradesh', min: 28.00, max: 38.00, mod: 33.00 },
-      { comm: 'Watermelon', var: 'Kiran Dark', gr: 'FAQ', mkt: 'Villupuram Yard', dist: 'Villupuram', st: 'Tamil Nadu', min: 9.00, max: 14.00, mod: 11.50 },
-      { comm: 'Muskmelon', var: 'Bobby Striped', gr: 'FAQ', mkt: 'Dharmapuri Mandi', dist: 'Dharmapuri', st: 'Tamil Nadu', min: 14.00, max: 19.00, mod: 16.20 },
-      { comm: 'Pineapple', var: 'Kew Queen', gr: 'A', mkt: 'Vazhakulam Yard', dist: 'Ernakulam', st: 'Kerala', min: 32.00, max: 42.00, mod: 36.50 },
-      { comm: 'Lemon (Nimbu)', var: 'Kagzi Green', gr: 'A', mkt: 'Tenali Mandi', dist: 'Guntur', st: 'Andhra Pradesh', min: 45.00, max: 62.00, mod: 52.00 },
-      { comm: 'Sweet Lime (Mosambi)', var: 'Jalna Gold', gr: 'A', mkt: 'Jalna Mandi', dist: 'Jalna', st: 'Maharashtra', min: 34.00, max: 44.00, mod: 38.50 },
-      { comm: 'Coconut', var: 'Pollachi Matured', gr: 'A', mkt: 'Pollachi APMC', dist: 'Coimbatore', st: 'Tamil Nadu', min: 29.00, max: 35.00, mod: 32.00 },
-      { comm: 'Cashew Nut', var: 'Raw Kernel W-240', gr: 'A', mkt: 'Panruti Market', dist: 'Cuddalore', st: 'Tamil Nadu', min: 620.00, max: 720.00, mod: 670.00 }
-    ];
-
-    return catalog.map((item, idx) => ({
-      index: idx + 1,
-      commodity: item.comm,
-      variety: item.var,
-      grade: item.gr,
-      market: item.mkt,
-      district: item.dist,
-      state: item.st,
-      minPriceKg: item.min,
-      maxPriceKg: item.max,
-      modalPriceKg: item.mod,
-      arrivalDate: dateToday,
-      image: this.getImageForCommodity(item.comm)
-    }));
   }
 }

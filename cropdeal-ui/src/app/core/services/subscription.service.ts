@@ -62,10 +62,15 @@ export class SubscriptionService {
    * Save a newly posted crop to local cache so subscribed dealers can view it instantly.
    */
   recordCropPosting(crop: Crop): void {
-    const raw = localStorage.getItem(this.allCropsKey);
-    let list: Crop[] = raw ? JSON.parse(raw) : [];
-    list.unshift(crop);
-    localStorage.setItem(this.allCropsKey, JSON.stringify(list.slice(0, 50)));
+    try {
+      const raw = localStorage.getItem(this.allCropsKey);
+      let list: Crop[] = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(list)) list = [];
+      list = [crop, ...list.filter(c => c && c.id !== crop.id)];
+      localStorage.setItem(this.allCropsKey, JSON.stringify(list.slice(0, 50)));
+    } catch (e) {
+      console.warn('recordCropPosting warning:', e);
+    }
   }
 
   /**
@@ -94,10 +99,12 @@ export class SubscriptionService {
 
         try {
           const subs: CropSubscription[] = JSON.parse(localStorage.getItem(key) || '[]');
+          if (!Array.isArray(subs)) continue;
+          const cropName = (newCrop.cropName || '').toLowerCase();
           const isMatch = subs.some(s =>
-            s.notifyInApp &&
-            (newCrop.cropName?.toLowerCase().includes(s.commodity.toLowerCase()) ||
-             s.commodity.toLowerCase().includes(newCrop.cropName?.toLowerCase()) ||
+            s && s.notifyInApp && s.commodity &&
+            (cropName.includes(s.commodity.toLowerCase()) ||
+             s.commodity.toLowerCase().includes(cropName) ||
              (s.category && newCrop.cropType && s.category.toLowerCase() === newCrop.cropType.toLowerCase()))
           );
 

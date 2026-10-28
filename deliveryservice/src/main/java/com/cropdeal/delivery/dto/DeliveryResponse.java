@@ -22,6 +22,7 @@ public class DeliveryResponse {
     private String refundStatus;
 
     private java.math.BigDecimal deliveryFee;
+    private Double distanceKm;
     private boolean feePaid;
     private String fulfillmentType;
 
@@ -137,6 +138,14 @@ public class DeliveryResponse {
 
     public void setDeliveryFee(java.math.BigDecimal deliveryFee) {
         this.deliveryFee = deliveryFee;
+    }
+
+    public Double getDistanceKm() {
+        return distanceKm;
+    }
+
+    public void setDistanceKm(Double distanceKm) {
+        this.distanceKm = distanceKm;
     }
 
     public boolean isFeePaid() {

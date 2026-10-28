@@ -466,22 +466,12 @@ export class LoginComponent implements OnInit {
         // User rule: "crop alert need to be only use our db and need to query only when login not ervrytime continuously"
         if (res.userId) {
           this.cropService.checkLoginPriceAlerts(res.userId).subscribe({
-            next: (alerts) => {
-              if (alerts && alerts.length > 0) {
-                alerts.forEach(a => {
-                  this.notificationService.addClientNotification({
-                    id: 'alert-' + Date.now(),
-                    userId: res.userId,
-                    title: `🌾 Price Alert: ${a.cropName}`,
-                    message: a.message || `Current DB APMC market rate ₹${a.currentGovPrice} reached your target!`,
-                    type: 'PRICE_ALERT',
-                    isRead: false,
-                    createdAt: new Date().toISOString()
-                  });
-                });
-              }
+            next: () => {
+              this.notificationService.getUserNotifications(res.userId).subscribe();
             },
-            error: () => {}
+            error: () => {
+              this.notificationService.getUserNotifications(res.userId).subscribe();
+            }
           });
         }
         this.router.navigate(['/dashboard']);

@@ -55,6 +55,8 @@ public class DeliveryAssignmentRequest {
     private String cropName;
     private java.math.BigDecimal cropQuantity;
     private String cropUnit;
+    private Double distanceKm;
+    private java.math.BigDecimal deliveryFee;
 
     public String getDeliveryAddress() {
         return deliveryAddress;
@@ -134,5 +136,21 @@ public class DeliveryAssignmentRequest {
 
     public void setCropUnit(String cropUnit) {
         this.cropUnit = cropUnit;
+    }
+
+    public Double getDistanceKm() {
+        return distanceKm;
+    }
+
+    public void setDistanceKm(Double distanceKm) {
+        this.distanceKm = distanceKm;
+    }
+
+    public java.math.BigDecimal getDeliveryFee() {
+        return deliveryFee;
+    }
+
+    public void setDeliveryFee(java.math.BigDecimal deliveryFee) {
+        this.deliveryFee = deliveryFee;
     }
 }

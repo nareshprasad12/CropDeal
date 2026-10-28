@@ -38,6 +38,8 @@ public class Delivery {
     @Column(precision = 10, scale = 2)
     private java.math.BigDecimal deliveryFee = new java.math.BigDecimal("100.00");
 
+    private Double distanceKm;
+
     private boolean feePaid = true;
 
     private String fulfillmentType = "DELIVERY_PARTNER"; // DELIVERY_PARTNER or SELF_PICKUP
@@ -186,6 +188,14 @@ public class Delivery {
 
     public void setDeliveryFee(java.math.BigDecimal deliveryFee) {
         this.deliveryFee = deliveryFee;
+    }
+
+    public Double getDistanceKm() {
+        return distanceKm;
+    }
+
+    public void setDistanceKm(Double distanceKm) {
+        this.distanceKm = distanceKm;
     }
 
     public boolean isFeePaid() {

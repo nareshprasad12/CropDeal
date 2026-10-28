@@ -7,6 +7,7 @@ import com.cropdeal.delivery.entity.DeliveryStatus;
 import com.cropdeal.delivery.repository.DeliveryAssignmentRepository;
 import com.cropdeal.delivery.repository.DeliveryRepository;
 import com.cropdeal.delivery.repository.DeliveryStatusHistoryRepository;
+import com.cropdeal.delivery.client.DeliveryNotificationClient;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +35,9 @@ class DeliveryServiceTest {
     @Mock
     private DeliveryStatusHistoryRepository statusHistoryRepository;
 
+    @Mock
+    private DeliveryNotificationClient notificationClient;
+
     @InjectMocks
     private DeliveryServiceImpl deliveryService;
 
@@ -55,7 +59,7 @@ class DeliveryServiceTest {
 
         assertNotNull(res);
         assertEquals(DeliveryStatus.AVAILABLE_FOR_PICKUP.name(), res.getStatus());
-        assertEquals(BigDecimal.valueOf(100), res.getDeliveryFee());
+        assertEquals(0, BigDecimal.valueOf(100).compareTo(res.getDeliveryFee()));
         assertEquals("DELIVERY_PARTNER", res.getFulfillmentType());
     }
 

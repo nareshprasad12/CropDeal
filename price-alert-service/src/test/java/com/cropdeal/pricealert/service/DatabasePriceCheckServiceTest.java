@@ -29,6 +29,12 @@ class DatabasePriceCheckServiceTest {
     @Mock
     private PriceAlertMatchingEngine matchingEngine;
 
+    @Mock
+    private com.cropdeal.pricealert.repository.PriceAlertSubscriptionRepository subscriptionRepository;
+
+    @Mock
+    private com.cropdeal.pricealert.repository.PriceAlertNotificationRepository notificationRepository;
+
     @InjectMocks
     private DatabasePriceCheckService priceCheckService;
 
@@ -93,8 +99,12 @@ class DatabasePriceCheckServiceTest {
                 .modalPricePerKg(28.0)
                 .build();
 
+        com.cropdeal.pricealert.entity.PriceAlertSubscription sub = com.cropdeal.pricealert.entity.PriceAlertSubscription.builder()
+                .cropName("Tomato")
+                .build();
+        when(subscriptionRepository.findByUserIdAndActiveTrue(101L)).thenReturn(List.of(sub));
         when(priceServiceClient.getLatestStoredPricesFromDb()).thenReturn(List.of(tomatoPrice));
-        when(matchingEngine.matchUserSubscriptionsAgainstMarketPrice(eq(101L), any(MatchMarketPriceRequest.class))).thenReturn(1);
+        when(matchingEngine.matchUserSubscriptionsAgainstMarketPrice(eq(101L), any(MatchMarketPriceRequest.class), anyList())).thenReturn(1);
 
         MatchResultResponse response = priceCheckService.checkUserSubscriptionsOnLogin(101L);
 
@@ -103,7 +113,7 @@ class DatabasePriceCheckServiceTest {
         assertEquals(1, response.getNotificationsTriggered());
         assertTrue(response.getMessage().contains("user 101 on login"));
 
-        verify(matchingEngine, times(1)).matchUserSubscriptionsAgainstMarketPrice(eq(101L), any(MatchMarketPriceRequest.class));
+        verify(matchingEngine, times(1)).matchUserSubscriptionsAgainstMarketPrice(eq(101L), any(MatchMarketPriceRequest.class), anyList());
     }
 
     @Test

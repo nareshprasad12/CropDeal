@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of, BehaviorSubject } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { Crop, CropAlert, GovernmentPrice } from '../models/crop.model';
@@ -282,8 +282,21 @@ export class CropService {
           const mapped = items
             .map(c => this.mapBackendCrop(c))
             .filter(c => c.status !== 'DELETED');
-          this.saveLocalCrops(mapped);
-          return mapped;
+          const currentLocal = this.getLocalCrops();
+          const merged = [...mapped];
+          for (const loc of currentLocal) {
+            const locId = String(loc.id || loc.cropId || '');
+            const exists = merged.some(m =>
+              String(m.id) === locId ||
+              String(m.cropId) === locId ||
+              (m.cropName?.toLowerCase() === loc.cropName?.toLowerCase() && String(m.farmerId) === String(loc.farmerId))
+            );
+            if (!exists && loc.status !== 'DELETED') {
+              merged.push(loc);
+            }
+          }
+          this.saveLocalCrops(merged);
+          return merged;
         }
         return this.getLocalCrops();
       }),
@@ -462,6 +475,68 @@ export class CropService {
   }
 
   // APMC Government Market Prices
+  getPaginatedPrices(params: {
+    page?: number;
+    size?: number;
+    sortBy?: string;
+    direction?: string;
+    commodity?: string;
+    state?: string;
+    district?: string;
+    market?: string;
+    arrivalDate?: string;
+  }): Observable<any> {
+    let httpParams = new HttpParams();
+    if (params.page !== undefined) httpParams = httpParams.set('page', params.page.toString());
+    if (params.size !== undefined) httpParams = httpParams.set('size', params.size.toString());
+    if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
+    if (params.direction) httpParams = httpParams.set('direction', params.direction);
+    if (params.commodity && params.commodity !== 'All Commodities') httpParams = httpParams.set('commodity', params.commodity);
+    if (params.state && params.state !== 'All States') httpParams = httpParams.set('state', params.state);
+    if (params.district && params.district !== 'All Districts') httpParams = httpParams.set('district', params.district);
+    if (params.market && params.market !== 'All Markets') httpParams = httpParams.set('market', params.market);
+    if (params.arrivalDate) httpParams = httpParams.set('arrivalDate', params.arrivalDate);
+
+    return this.http.get<any>(this.priceUrl, { params: httpParams }).pipe(
+      catchError(() => of({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 25 }))
+    );
+  }
+
+  getMandiSyncStatus(): Observable<any> {
+    return this.http.get<any>(`${this.priceUrl}/sync-status`).pipe(
+      catchError(() => of({
+        lastSuccessfulSyncAt: null,
+        syncStatus: 'SUCCESS',
+        recordsFetched: 0,
+        recordsInserted: 0,
+        recordsUpdated: 0
+      }))
+    );
+  }
+
+  getMandiPriceRecommendation(commodity: string, location?: string, state?: string, district?: string): Observable<any> {
+    let params = new HttpParams().set('commodity', commodity);
+    if (location) params = params.set('location', location);
+    if (state) params = params.set('state', state);
+    if (district) params = params.set('district', district);
+
+    return this.http.get<any>(`${this.priceUrl}/recommendation`, { params }).pipe(
+      catchError(() => of(null))
+    );
+  }
+
+  getMandiStates(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.priceUrl}/states`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  getMandiCommodities(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.priceUrl}/commodities`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
   getGovernmentPrices(): Observable<GovernmentPrice[]> {
     return this.http.get<GovernmentPrice[]>(`${this.priceUrl}/all`).pipe(
       catchError(() => of([]))

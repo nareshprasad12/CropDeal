@@ -17,7 +17,7 @@ export interface Delivery {
   distanceKm?: number | null;
   deliveryFee?: number | null;
   fulfillmentType?: 'SELF_PICKUP' | 'DELIVERY_AGENT';
-  status: 'PENDING_ASSIGNMENT' | 'ASSIGNED' | 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED' | 'AVAILABLE_FOR_PICKUP' | 'COMPLETED' | 'CANCELLED';
+  status: 'PENDING_ASSIGNMENT' | 'ASSIGNED' | 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED' | 'AVAILABLE_FOR_PICKUP' | 'COMPLETED' | 'CANCELLED' | 'SELF_PICKUP';
   trackingNumber?: string | null;
   estimatedDeliveryDate?: string | null;
   updatedAt?: string;

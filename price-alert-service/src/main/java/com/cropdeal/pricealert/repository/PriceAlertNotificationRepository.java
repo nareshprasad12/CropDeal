@@ -10,6 +10,10 @@ import java.util.List;
 @Repository
 public interface PriceAlertNotificationRepository extends JpaRepository<PriceAlertNotification, Long> {
 
+    boolean existsBySubscriptionId(Long subscriptionId);
+
+    boolean existsBySubscriptionIdAndSourceType(Long subscriptionId, AlertSourceType sourceType);
+
     boolean existsBySubscriptionIdAndSourceTypeAndSourceId(
             Long subscriptionId, AlertSourceType sourceType, Long sourceId);
 

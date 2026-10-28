@@ -4,11 +4,15 @@ import com.cropdeal.priceservice.entity.MarketPrice;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface MarketPriceRepository extends JpaRepository<MarketPrice, Long> {
+public interface MarketPriceRepository extends JpaRepository<MarketPrice, Long>, JpaSpecificationExecutor<MarketPrice> {
 
     Optional<MarketPrice> findByStateAndDistrictAndMarketAndCommodityAndVarietyAndGradeAndArrivalDate(
             String state,
@@ -18,6 +22,13 @@ public interface MarketPriceRepository extends JpaRepository<MarketPrice, Long> 
             String variety,
             String grade,
             LocalDate arrivalDate);
+
+    Optional<MarketPrice> findFirstByStateAndDistrictAndMarketAndCommodityAndVariety(
+            String state,
+            String district,
+            String market,
+            String commodity,
+            String variety);
 
     @Query("""
             SELECT m
@@ -107,4 +118,10 @@ public interface MarketPriceRepository extends JpaRepository<MarketPrice, Long> 
                OR LOWER(TRIM(m.commodity)) LIKE LOWER(CONCAT(TRIM(:commodity), '(%'))
             """)
     List<MarketPrice> findByCommodityNormalized(@Param("commodity") String commodity);
+
+    @Query("SELECT DISTINCT m.state FROM MarketPrice m WHERE m.state IS NOT NULL ORDER BY m.state ASC")
+    List<String> findDistinctStates();
+
+    @Query("SELECT DISTINCT m.commodity FROM MarketPrice m WHERE m.commodity IS NOT NULL ORDER BY m.commodity ASC")
+    List<String> findDistinctCommodities();
 }

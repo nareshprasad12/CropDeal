@@ -5,7 +5,12 @@ import java.time.LocalDate;
 
 @Entity
 @Table(name = "market_prices", indexes = {
-        })
+        @Index(name = "idx_mp_filter", columnList = "commodity, state, district, arrivalDate"),
+        @Index(name = "idx_mp_arrival", columnList = "arrivalDate"),
+        @Index(name = "idx_mp_state_dist", columnList = "state, district"),
+        @Index(name = "idx_mp_commodity", columnList = "commodity"),
+        @Index(name = "idx_mp_market", columnList = "market")
+})
 public class MarketPrice {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

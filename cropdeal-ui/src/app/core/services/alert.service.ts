@@ -59,8 +59,23 @@ export class AlertService {
       if (stored) {
         const parsed: CropAlert[] = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          this.alertsSubject.next(parsed);
-          this.alertCountSubject.next(parsed.length);
+          const evaluated = parsed.map(a => {
+            const cur = Number(a.currentGovPrice || 0);
+            const tgt = Number(a.targetPrice || 0);
+            if (tgt && cur) {
+              if (a.condition === 'ABOVE' && cur >= tgt) {
+                a.status = 'TRIGGERED';
+                a.message = `${a.cropName} APMC market price is ₹${a.currentGovPrice}/Kg, meeting your trigger condition (ABOVE ₹${a.targetPrice}/Kg)!`;
+              } else if (a.condition === 'BELOW' && cur <= tgt) {
+                a.status = 'TRIGGERED';
+                a.message = `${a.cropName} APMC market price dropped to ₹${a.currentGovPrice}/Kg, meeting your trigger condition (BELOW ₹${a.targetPrice}/Kg)!`;
+              }
+            }
+            return a;
+          });
+          this.alertsSubject.next(evaluated);
+          this.alertCountSubject.next(evaluated.length);
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(evaluated));
           return;
         }
       }
@@ -79,6 +94,17 @@ export class AlertService {
   }
 
   addAlert(alert: CropAlert): void {
+    const cur = Number(alert.currentGovPrice || 0);
+    const tgt = Number(alert.targetPrice || 0);
+    if (tgt && cur) {
+      if (alert.condition === 'ABOVE' && cur >= tgt) {
+        alert.status = 'TRIGGERED';
+        alert.message = `${alert.cropName} APMC market price is ₹${alert.currentGovPrice}/Kg, meeting your trigger condition (ABOVE ₹${alert.targetPrice}/Kg)!`;
+      } else if (alert.condition === 'BELOW' && cur <= tgt) {
+        alert.status = 'TRIGGERED';
+        alert.message = `${alert.cropName} APMC market price dropped to ₹${alert.currentGovPrice}/Kg, meeting your trigger condition (BELOW ₹${alert.targetPrice}/Kg)!`;
+      }
+    }
     const current = [alert, ...this.alertsSubject.value.filter(a => a.id !== alert.id)];
     this.alertsSubject.next(current);
     this.alertCountSubject.next(current.length);

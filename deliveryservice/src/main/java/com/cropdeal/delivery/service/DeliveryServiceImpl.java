@@ -16,6 +16,7 @@ import com.cropdeal.delivery.exception.DeliveryNotFoundException;
 import com.cropdeal.delivery.repository.DeliveryAssignmentRepository;
 import com.cropdeal.delivery.repository.DeliveryRepository;
 import com.cropdeal.delivery.repository.DeliveryStatusHistoryRepository;
+import com.cropdeal.delivery.client.DeliveryNotificationClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,15 +27,18 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final DeliveryRepository deliveryRepository;
     private final DeliveryAssignmentRepository assignmentRepository;
     private final DeliveryStatusHistoryRepository statusHistoryRepository;
+    private final DeliveryNotificationClient notificationClient;
 
     public DeliveryServiceImpl(
             DeliveryRepository deliveryRepository,
             DeliveryAssignmentRepository assignmentRepository,
-            DeliveryStatusHistoryRepository statusHistoryRepository) {
+            DeliveryStatusHistoryRepository statusHistoryRepository,
+            DeliveryNotificationClient notificationClient) {
 
         this.deliveryRepository = deliveryRepository;
         this.assignmentRepository = assignmentRepository;
         this.statusHistoryRepository = statusHistoryRepository;
+        this.notificationClient = notificationClient;
     }
 
     @Override
@@ -46,7 +50,21 @@ public class DeliveryServiceImpl implements DeliveryService {
         delivery.setDeliveryAgentId(request.getDeliveryAgentId());
         delivery.setPickupAddress(request.getPickupAddress());
         delivery.setDeliveryAddress(request.getDeliveryAddress());
-        delivery.setDeliveryFee(java.math.BigDecimal.valueOf(100));
+
+        if (request.getDeliveryFee() != null && request.getDeliveryFee().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            delivery.setDeliveryFee(request.getDeliveryFee());
+        } else if (request.getDistanceKm() != null && request.getDistanceKm() > 0) {
+            delivery.setDeliveryFee(java.math.BigDecimal.valueOf(request.getDistanceKm() * 10.0));
+        } else {
+            delivery.setDeliveryFee(java.math.BigDecimal.valueOf(100.0));
+        }
+
+        if (request.getDistanceKm() != null && request.getDistanceKm() > 0) {
+            delivery.setDistanceKm(request.getDistanceKm());
+        } else if (delivery.getDeliveryFee() != null && delivery.getDeliveryFee().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            delivery.setDistanceKm(delivery.getDeliveryFee().doubleValue() / 10.0);
+        }
+
         delivery.setFeePaid(true);
         delivery.setFulfillmentType("DELIVERY_PARTNER");
         delivery.setDealerId(request.getDealerId());
@@ -75,7 +93,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             assignmentRepository.save(assignment);
             saveStatusHistory(savedDelivery, "Delivery created and assigned");
         } else {
-            saveStatusHistory(savedDelivery, "Delivery created and added to Global Pool (Fee: ₹100)");
+            saveStatusHistory(savedDelivery, "Delivery created and added to Global Pool (Fee: ₹" + savedDelivery.getDeliveryFee() + ", Distance: " + savedDelivery.getDistanceKm() + " km)");
         }
 
         return mapToResponse(savedDelivery);
@@ -120,6 +138,18 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         Delivery saved = deliveryRepository.save(delivery);
         saveStatusHistory(saved, "Delivery status updated");
+
+        try {
+            if (notificationClient != null) {
+                notificationClient.sendDeliveryStatusNotification(
+                        saved.getDealerId(),
+                        saved.getOrderId(),
+                        saved.getCropName(),
+                        status.name(),
+                        null
+                );
+            }
+        } catch (Exception ignored) {}
 
         return mapToResponse(saved);
     }
@@ -249,6 +279,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         response.setCreatedAt(delivery.getCreatedAt());
         response.setUpdatedAt(delivery.getUpdatedAt());
         response.setDeliveryFee(delivery.getDeliveryFee());
+        response.setDistanceKm(delivery.getDistanceKm());
         response.setFeePaid(delivery.isFeePaid());
         response.setFulfillmentType(delivery.getFulfillmentType());
         response.setDealerId(delivery.getDealerId());
@@ -293,6 +324,19 @@ public class DeliveryServiceImpl implements DeliveryService {
         assignmentRepository.save(assignment);
 
         saveStatusHistory(saved, "Delivery claimed from Global Pool by agent " + deliveryAgentId);
+
+        try {
+            if (notificationClient != null) {
+                notificationClient.sendDeliveryStatusNotification(
+                        saved.getDealerId(),
+                        saved.getOrderId(),
+                        saved.getCropName(),
+                        "ASSIGNED",
+                        "Agent #" + deliveryAgentId
+                );
+            }
+        } catch (Exception ignored) {}
+
         return mapToResponse(saved);
     }
 

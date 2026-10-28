@@ -47,6 +47,47 @@ public class NotificationController {
     }
 
     // ---------------------------------------------------------
+    // GET NOTIFICATIONS FOR LOGGED IN USER
+    // ---------------------------------------------------------
+
+    // GET /api/notifications/user/{userId}
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<NotificationResponse>>
+    getByUser(@PathVariable String userId) {
+        return ResponseEntity.ok(
+                notificationService.getNotificationsByUser(userId)
+        );
+    }
+
+    // PUT /api/notifications/{notificationId}/read
+    @PutMapping("/{notificationId}/read")
+    public ResponseEntity<Void> markAsRead(@PathVariable Long notificationId) {
+        notificationService.markAsRead(notificationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // PUT /api/notifications/user/{userId}/read-all
+    @PutMapping("/user/{userId}/read-all")
+    public ResponseEntity<Void> markAllAsRead(@PathVariable String userId) {
+        notificationService.markAllAsRead(userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // DELETE /api/notifications/user/{userId}/clear-all
+    @DeleteMapping("/user/{userId}/clear-all")
+    public ResponseEntity<Void> clearAll(@PathVariable String userId) {
+        notificationService.clearAllForUser(userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // DELETE /api/notifications/{notificationId}
+    @DeleteMapping("/{notificationId}")
+    public ResponseEntity<Void> deleteNotification(@PathVariable Long notificationId) {
+        notificationService.deleteNotification(notificationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ---------------------------------------------------------
     // DELIVERY OTP
     // ---------------------------------------------------------
 
@@ -85,7 +126,7 @@ public class NotificationController {
     }
 
     // ---------------------------------------------------------
-    // GET NOTIFICATION
+    // GET NOTIFICATION BY ID
     // ---------------------------------------------------------
 
     // GET /api/notifications/{notificationId}

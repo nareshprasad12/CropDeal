@@ -2799,8 +2799,8 @@ export class LandingComponent implements OnInit {
     });
 
     // Send notifications to Dealer and Farmer
-    const dealerId = this.currentUser?.id || this.currentUser?.userId || 'dealer-1';
-    const farmerId = crop.farmerId || 'farmer-1';
+    const dealerId = String(this.currentUser?.id || this.currentUser?.userId || '2').replace(/\D/g, '') || '2';
+    const farmerId = String(crop.farmerId || '1').replace(/\D/g, '') || '1';
     const dealerName = this.currentUser?.fullName || this.currentUser?.username || 'Commercial Dealer';
     const farmerName = crop.farmerName || 'Farmer';
 
@@ -2881,52 +2881,21 @@ export class LandingComponent implements OnInit {
       alert(`Proposed negotiation price (₹${this.proposedPrice}) must be lower than original listed price of ₹${crop.pricePerKg}/${crop.unit || 'Kg'}.`);
       return;
     }
-    const dealerId = this.currentUser.id || this.currentUser.userId || 'dealer-1';
-    const farmerId = crop.farmerId || 'farmer-1';
+    const dealerId = String(this.currentUser.id || this.currentUser.userId || '2').replace(/\D/g, '') || '2';
+    const farmerId = String(crop.farmerId || '1').replace(/\D/g, '') || '1';
     const dealerName = this.currentUser.fullName || this.currentUser.username || 'Apex Agro Mills Ltd';
     const farmerName = crop.farmerName || 'Sardar Gurpreet Singh';
-
-    const newNeg: any = {
-      id: Date.now(),
-      cropId: String(crop.id || 'crop-101'),
-      cropName: crop.name,
-      grade: crop.grade,
-      quantity: `${crop.availableQuantity || 100} ${crop.unit || 'Kg'}`,
-      availableStock: crop.availableQuantity || 100,
-      img: crop.image,
-      dealerName: dealerName,
-      dealerLocation: this.currentUser.address || 'Commercial Grain Terminal, Delhi',
-      dealerPhone: this.currentUser.phone || '+91 98722 55667',
-      farmerName: farmerName,
-      farmerId: farmerId,
-      dealerId: dealerId,
-      standardPrice: crop.pricePerKg,
-      expectedCounter: this.proposedPrice,
-      expectedParty: 'Dealer',
-      currentCounter: this.proposedPrice,
-      currentParty: 'Dealer',
-      status: 'COUNTERED',
-      statusText: 'Dealer Countered'
-    };
-
-    let storedNegs: any[] = [];
-    try {
-      const raw = localStorage.getItem('cropdeal_negotiations');
-      if (raw) storedNegs = JSON.parse(raw);
-    } catch {}
-    storedNegs = [newNeg, ...storedNegs];
-    localStorage.setItem('cropdeal_negotiations', JSON.stringify(storedNegs));
 
     this.notificationService.sendNotification(
       farmerId,
       '💬 New Price Proposal',
-      `Dealer ${dealerName} proposed ₹${this.proposedPrice}/unit for ${crop.name} (Listed: ₹${crop.pricePerKg}/${crop.unit || 'Kg'}).`,
+      'Dealer ' + dealerName + ' proposed ₹' + this.proposedPrice + '/unit for ' + crop.name + ' (Listed: ₹' + crop.pricePerKg + '/' + (crop.unit || 'Kg') + ').',
       'NEGOTIATION'
     );
     this.notificationService.sendNotification(
       dealerId,
       '💬 Proposal Sent',
-      `Your price proposal of ₹${this.proposedPrice}/unit for ${crop.name} was sent to ${farmerName}.`,
+      'Your price proposal of ₹' + this.proposedPrice + '/unit for ' + crop.name + ' was sent to ' + farmerName + '.',
       'NEGOTIATION'
     );
 

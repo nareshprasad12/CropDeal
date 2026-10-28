@@ -28,6 +28,7 @@ public class OrderController {
     }
 
     @PostMapping
+    @io.github.resilience4j.ratelimiter.annotation.RateLimiter(name = "orderCreateRateLimiter", fallbackMethod = "rateLimiterFallback")
     public ResponseEntity<OrderResponse> createOrder(
             @Valid @RequestBody CreateOrderRequest request) {
 
@@ -149,5 +150,11 @@ public class OrderController {
         return ResponseEntity.ok()
                 .headers(headers)
                 .body(pdfBytes);
+    }
+
+    public ResponseEntity<OrderResponse> rateLimiterFallback(CreateOrderRequest request, Throwable t) {
+        OrderResponse response = new OrderResponse();
+        response.setStatus("RATE_LIMITED");
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(response);
     }
 }

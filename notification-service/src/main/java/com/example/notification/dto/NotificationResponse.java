@@ -11,6 +11,7 @@ public class NotificationResponse {
     private String status;
     private Long orderId;
     private LocalDateTime createdAt;
+    private boolean read;
 
     public NotificationResponse() {
     }
@@ -69,5 +70,13 @@ public class NotificationResponse {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public boolean isRead() {
+        return read || "READ".equalsIgnoreCase(status);
+    }
+
+    public void setRead(boolean read) {
+        this.read = read;
     }
 }
