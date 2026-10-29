@@ -3,9 +3,13 @@ package com.cropdeal.auth.config;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 @Configuration
 public class OpenApiConfig {
@@ -14,6 +18,7 @@ public class OpenApiConfig {
     public OpenAPI cropDealOpenAPI() {
 
         return new OpenAPI()
+                .servers(List.of(new Server().url("/").description("Default Server URL")))
                 .info(
                         new Info()
                                 .title("CropDeal Authentication Service API")
@@ -22,7 +27,7 @@ public class OpenApiConfig {
                                         "Authentication and authorization APIs for CropDeal"
                                 )
                 )
-                .addSecurityItem(new io.swagger.v3.oas.models.security.SecurityRequirement().addList("bearerAuth"))
+                .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
                 .components(
                         new Components()
                                 .addSecuritySchemes(

@@ -13,7 +13,7 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI customOpenAPI() {
         Server server = new Server();
-        server.setUrl("http://localhost:8080");
+        server.setUrl("/");
         server.setDescription("CropDeal API Gateway");
         return new OpenAPI().servers(List.of(server));
     }

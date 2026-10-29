@@ -9,7 +9,7 @@ import java.util.Map;
 
 @FeignClient(
         name = "price-alert-service",
-        url = "${price-alert-service.url:http://localhost:8094}"
+        url = "${price-alert-service.url:http://price-alert-service:8094}"
 )
 public interface PriceAlertServiceClient {
 

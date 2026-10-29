@@ -4,8 +4,11 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 @Configuration
 public class OpenApiConfig {
@@ -13,6 +16,7 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI reportServiceOpenAPI() {
         return new OpenAPI()
+                .servers(List.of(new Server().url("/").description("Default Server URL")))
                 .info(new Info()
                         .title("CropDeal Report Service API")
                         .description("REST API for Admin Reports: Payments, Dealers, Farmers, Delivery Partners, and Crops")
